@@ -1,32 +1,47 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        canvas { display: block; border: 2px solid white; margin: 50px auto; }
-    </style>
-</head>
-<body>
-    <canvas id="gameCanvas" width="600" height="400"></canvas>
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let x = 300, y = 200, dx = 2, dy = 2;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.beginPath();
-            ctx.arc(x, y, 20, 0, Math.PI * 2);
-            ctx.fillStyle = 'cyan';
-            ctx.fill();
-            
-            x += dx; y += dy;
-            if (x > 580 || x < 20) dx = -dx;
-            if (y > 380 || y < 20) dy = -dy;
-            
-            requestAnimationFrame(update);
-        }
-        update();
-    </script>
-</body>
-</html>
+let player = { x: 300, y: 370, w: 40, h: 20 };
+let bubble = { x: 100, y: 100, dx: 3, dy: 3, r: 20 };
+let harpoon = { x: -10, y: 400, active: false };
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 20;
+    if (e.key === 'ArrowRight' && player.x < 560) player.x += 20;
+    if (e.key === ' ' && !harpoon.active) {
+        harpoon.x = player.x + 20;
+        harpoon.active = true;
+    }
+});
+
+function update() {
+    ctx.clearRect(0, 0, 600, 400);
+
+    // ציור השחקן
+    ctx.fillStyle = 'red';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    // תנועת הבועה
+    bubble.x += bubble.dx;
+    bubble.y += bubble.dy;
+    if (bubble.x > 580 || bubble.x < 20) bubble.dx = -bubble.dx;
+    if (bubble.y > 380 || bubble.y < 20) bubble.dy = -bubble.dy;
+    ctx.fillStyle = 'cyan';
+    ctx.beginPath();
+    ctx.arc(bubble.x, bubble.y, bubble.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // צלצל
+    if (harpoon.active) {
+        harpoon.y -= 5;
+        ctx.strokeStyle = 'white';
+        ctx.beginPath();
+        ctx.moveTo(harpoon.x, 400);
+        ctx.lineTo(harpoon.x, harpoon.y);
+        ctx.stroke();
+        if (harpoon.y < 0) harpoon.active = false;
+    }
+
+    requestAnimationFrame(update);
+}
+update();
