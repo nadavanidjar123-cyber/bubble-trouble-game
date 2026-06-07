@@ -1,188 +1,162 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="he">
 <head>
     <meta charset="UTF-8">
-    <title>Bubble Trouble - Professional Engine</title>
+    <title>Professional Bubble Trouble Engine</title>
     <style>
-        body { margin: 0; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: #eee; }
-        canvas { border: 2px solid #333; box-shadow: 0 0 40px rgba(0,0,0,0.5); cursor: crosshair; }
+        body { margin: 0; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        canvas { border: 4px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
-
-<canvas id="gameCanvas" width="900" height="600"></canvas>
-
-<script>
-/**
- * BUBBLE TROUBLE PRO ENGINE
- * Architecture: Object-Oriented Game Loop
- */
-
-class GameEngine {
-    constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
-        this.width = this.canvas.width;
-        this.height = this.canvas.height;
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        // --- Game Core Classes ---
         
-        this.player = new Player(this);
-        this.bubbles = [];
-        this.harpoons = [];
-        this.powerUps = [];
-        this.score = 0;
-        this.lives = 3;
-        
-        this.setupInput();
-        this.spawnInitialBubbles();
-        this.loop();
-    }
+        class GameEngine {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.width = this.canvas.width;
+                this.height = this.canvas.height;
+                
+                this.score = 0;
+                this.level = 1;
+                this.lives = 3;
+                this.isRunning = true;
+                
+                this.player = new Player(this);
+                this.bubbles = [new Bubble(100, 100, 40, 2, 2, this)];
+                this.harpoons = [];
+                this.particles = [];
+                
+                this.input = new InputHandler();
+                this.requestLoop = this.requestLoop.bind(this);
+            }
 
-    setupInput() {
-        this.keys = {};
-        window.addEventListener('keydown', e => this.keys[e.code] = true);
-        window.addEventListener('keyup', e => this.keys[e.code] = false);
-    }
+            requestLoop() {
+                if(!this.isRunning) return;
+                this.update();
+                this.draw();
+                requestAnimationFrame(this.requestLoop);
+            }
 
-    spawnInitialBubbles() {
-        this.bubbles.push(new Bubble(100, 100, 40, 3, 2, this));
-    }
+            update() {
+                this.player.update(this.input);
+                this.harpoons.forEach(h => h.update());
+                this.bubbles.forEach(b => b.update());
+                this.particles.forEach(p => p.update());
+                
+                // Collision Detection
+                this.checkCollisions();
+            }
 
-    update() {
-        this.player.update();
-        
-        this.bubbles.forEach(b => b.update());
-        this.harpoons.forEach(h => h.update());
-        this.powerUps.forEach(p => p.update());
+            checkCollisions() {
+                // Harpoon vs Bubble
+                this.harpoons.forEach((h, hIdx) => {
+                    this.bubbles.forEach((b, bIdx) => {
+                        if(b.checkHit(h)) {
+                            this.score += 50;
+                            h.active = false;
+                            b.split();
+                            this.bubbles.splice(bIdx, 1);
+                        }
+                    });
+                });
+            }
 
-        // Collision Logic
-        this.handleCollisions();
-    }
+            draw() {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                this.player.draw(this.ctx);
+                this.harpoons.forEach(h => h.draw(this.ctx));
+                this.bubbles.forEach(b => b.draw(this.ctx));
+                
+                // UI
+                this.ctx.fillStyle = "white";
+                this.ctx.font = "20px Arial";
+                this.ctx.fillText(`Score: ${this.score} | Level: ${this.level} | Lives: ${this.lives}`, 20, 30);
+            }
+        }
 
-    handleCollisions() {
-        // Harpoon vs Bubbles
-        this.harpoons.forEach((h, hIdx) => {
-            this.bubbles.forEach((b, bIdx) => {
-                if (h.active && b.isHit(h)) {
-                    h.active = false;
-                    b.split();
-                    this.score += 100;
+        class InputHandler {
+            constructor() {
+                this.keys = {};
+                window.addEventListener('keydown', e => this.keys[e.code] = true);
+                window.addEventListener('keyup', e => this.keys[e.code] = false);
+            }
+        }
+
+        class Player {
+            constructor(game) {
+                this.game = game;
+                this.x = 400; this.y = 550;
+                this.width = 40; this.height = 40;
+                this.speed = 8;
+            }
+            update(input) {
+                if(input.keys['ArrowLeft'] && this.x > 0) this.x -= this.speed;
+                if(input.keys['ArrowRight'] && this.x < this.game.width - this.width) this.x += this.speed;
+                if(input.keys['Space'] && this.game.harpoons.length === 0) {
+                    this.game.harpoons.push(new Harpoon(this.x + 20, this.y, this.game));
                 }
-            });
-        });
-    }
-
-    draw() {
-        this.ctx.clearRect(0, 0, this.width, this.height);
-        this.player.draw();
-        this.bubbles.forEach(b => b.draw());
-        this.harpoons.forEach(h => h.draw());
-        this.powerUps.forEach(p => p.draw());
-        
-        // HUD
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '24px Arial';
-        this.ctx.fillText(`Score: ${this.score} | Lives: ${this.lives}`, 20, 40);
-    }
-
-    loop() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.loop());
-    }
-}
-
-class Player {
-    constructor(game) {
-        this.game = game;
-        this.width = 50;
-        this.height = 50;
-        this.x = game.width / 2;
-        this.y = game.height - this.height;
-        this.speed = 7;
-    }
-
-    update() {
-        if (this.game.keys['ArrowLeft'] && this.x > 0) this.x -= this.speed;
-        if (this.game.keys['ArrowRight'] && this.x < this.game.width - this.width) this.x += this.speed;
-        if (this.game.keys['Space'] && this.game.harpoons.length === 0) {
-            this.game.harpoons.push(new Harpoon(this.x + this.width/2, this.y, this.game));
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
         }
-    }
 
-    draw() {
-        this.game.ctx.fillStyle = '#FFD700';
-        this.game.ctx.fillRect(this.x, this.y, this.width, this.height);
-        this.game.ctx.fillStyle = 'red';
-        this.game.ctx.fillRect(this.x + 5, this.y - 10, 40, 10);
-    }
-}
-
-class Bubble {
-    constructor(x, y, radius, dx, dy, game) {
-        this.x = x; this.y = y; this.radius = radius;
-        this.dx = dx; this.dy = dy; this.game = game;
-        this.gravity = 0.15;
-    }
-
-    update() {
-        this.x += this.dx;
-        this.y += this.dy;
-        this.dy += this.gravity;
-
-        if (this.x + this.radius > this.game.width || this.x - this.radius < 0) this.dx *= -1;
-        if (this.y + this.radius > this.game.height) {
-            this.y = this.game.height - this.radius;
-            this.dy = -8;
+        class Bubble {
+            constructor(x, y, radius, dx, dy, game) {
+                this.x = x; this.y = y; this.radius = radius;
+                this.dx = dx; this.dy = dy; this.game = game;
+                this.gravity = 0.2;
+            }
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+                this.dy += this.gravity;
+                if(this.x + this.radius > this.game.width || this.x - this.radius < 0) this.dx *= -1;
+                if(this.y + this.radius > this.game.height) this.dy = -10;
+            }
+            checkHit(harpoon) {
+                return Math.hypot(this.x - harpoon.x, this.y - harpoon.y) < this.radius;
+            }
+            split() {
+                if(this.radius > 15) {
+                    this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, 3, -5, this.game));
+                    this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, -3, -5, this.game));
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#00ffff';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
-    }
 
-    isHit(harpoon) {
-        return Math.hypot(this.x - harpoon.x, this.y - harpoon.y) < this.radius;
-    }
-
-    split() {
-        const idx = this.game.bubbles.indexOf(this);
-        this.game.bubbles.splice(idx, 1);
-        if (this.radius > 15) {
-            this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, 2, -5, this.game));
-            this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, -2, -5, this.game));
+        class Harpoon {
+            constructor(x, y, game) {
+                this.x = x; this.y = y; this.active = true; this.game = game;
+            }
+            update() {
+                this.y -= 10;
+                if(this.y < 0) this.active = false;
+            }
+            draw(ctx) {
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.game.height);
+                ctx.lineTo(this.x, this.y);
+                ctx.stroke();
+            }
         }
-    }
 
-    draw() {
-        this.game.ctx.fillStyle = '#00FFFF';
-        this.game.ctx.beginPath();
-        this.game.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        this.game.ctx.fill();
-    }
-}
-
-class Harpoon {
-    constructor(x, y, game) {
-        this.x = x; this.y = y; this.game = game;
-        this.active = true;
-    }
-
-    update() {
-        this.y -= 10;
-        if (this.y < 0) {
-            this.active = false;
-            this.game.harpoons.splice(this.game.harpoons.indexOf(this), 1);
-        }
-    }
-
-    draw() {
-        this.game.ctx.strokeStyle = 'white';
-        this.game.ctx.lineWidth = 3;
-        this.game.ctx.beginPath();
-        this.game.ctx.moveTo(this.x, this.game.height);
-        this.game.ctx.lineTo(this.x, this.y);
-        this.game.ctx.stroke();
-    }
-}
-
-// Start Game
-const game = new GameEngine('gameCanvas');
-</script>
+        // Initialize Engine
+        const game = new GameEngine();
+        game.requestLoop();
+    </script>
 </body>
 </html>
