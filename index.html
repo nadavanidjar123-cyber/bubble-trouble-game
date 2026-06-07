@@ -2,14 +2,12 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Bubble Trouble - Ultimate</title>
+    <title>Bubble Trouble Pro</title>
     <style>
-        body { margin: 0; background: #050510; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; user-select: none; }
-        #game-container { position: relative; box-shadow: 0 0 50px rgba(0, 150, 255, 0.2); }
-        canvas { border: 4px solid #334; background: radial-gradient(circle at bottom, #112 0%, #000 100%); display: block; }
-        #ui { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; color: #0f0; font-size: 22px; font-weight: bold; text-shadow: 2px 2px 4px #000; z-index: 10; }
-        #time-bar-container { position: absolute; bottom: 0; width: 100%; height: 12px; background: #222; border-top: 2px solid #555; }
-        #time-bar { height: 100%; background: linear-gradient(90deg, #f00, #ff0, #0f0); width: 100%; transition: width 0.1s; }
+        body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #game-container { position: relative; border: 6px solid #333; background: #000; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; color: #fff; font-size: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -21,145 +19,111 @@
         <div>ניקוד: <span id="score">0</span></div>
     </div>
     <canvas id="game" width="800" height="500"></canvas>
-    <div id="time-bar-container"><div id="time-bar"></div></div>
 </div>
 
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-let state = { lvl: 1, lives: 3, score: 0, time: 100, gameOver: false };
-let player = { x: 400, y: 460, w: 34, h: 40, speed: 6, shield: false, maxShots: 1 };
+let state = { lvl: 1, lives: 3, score: 0, gameOver: false };
+let player = { x: 400, y: 450, w: 25, h: 35, speed: 7 };
 let harpoons = [];
 let bubbles = [];
-let drops = [];
-let spikesY = 20;
-
-const dropTypes = [
-    { type: 'life', color: '#ff2222', symbol: '❤' },
-    { type: 'time', color: '#ffee00', symbol: '⏳' },
-    { type: 'shield', color: '#00ccff', symbol: '🛡' },
-    { type: 'weapon', color: '#00ff44', symbol: '🔫' }
-];
+let spikesY = 30; // גובה הקוצים
 
 function initLevel() {
-    state.time = 100;
-    harpoons = [];
-    drops = [];
-    player.x = canvas.width / 2;
-    player.shield = false;
-    player.maxShots = 1;
     bubbles = [];
+    harpoons = [];
+    player.x = 400;
     
-    let count = Math.min(state.lvl, 6); 
+    // יצירת בועות עם מהירות מבוקרת
+    let count = Math.min(state.lvl + 1, 6);
     for(let i=0; i<count; i++) {
         bubbles.push({
-            x: 100 + (i * 120), y: 150,
-            r: 25 + (state.lvl * 3), 
-            dx: (Math.random() > 0.5 ? 1 : -1) * (2 + state.lvl * 0.3), dy: 0,
+            x: 100 + (i * 100), y: 100,
+            r: 30, dx: (Math.random() > 0.5 ? 2 : -2), dy: 0,
             hue: Math.random() * 360
         });
     }
 }
 
-function drawPlayer(x, y) {
-    if (player.shield) {
-        ctx.beginPath(); ctx.arc(x, y - 10, 35, 0, Math.PI*2);
-        ctx.fillStyle = "rgba(0, 200, 255, 0.3)"; ctx.fill();
-        ctx.strokeStyle = "#00ccff"; ctx.stroke();
-    }
-    ctx.fillStyle = "#e6b800"; ctx.fillRect(x - player.w/2, y - 20, player.w, player.h);
-    ctx.fillStyle = "#2266cc"; ctx.fillRect(x - player.w/2, y, player.w, 20);
-    ctx.fillStyle = "#cc0000"; ctx.beginPath(); ctx.arc(x, y - 20, 15, Math.PI, 0); ctx.fill();
-    ctx.fillRect(x - 20, y - 20, 40, 4);
-}
-
 function update() {
     if (state.gameOver) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    state.time -= 0.02;
-    document.getElementById('time-bar').style.width = state.time + "%";
-    if (state.time <= 0) { loseLife("נגמר הזמן!"); return; }
 
     // ציור קוצים
-    ctx.fillStyle = "#444";
-    for(let i=0; i<canvas.width; i+=20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i+10, spikesY); ctx.lineTo(i+20, 0); ctx.fill(); }
-
-    if (keys['ArrowLeft'] && player.x > player.w/2) player.x -= player.speed;
-    if (keys['ArrowRight'] && player.x < canvas.width - player.w/2) player.x += player.speed;
-    drawPlayer(player.x, player.y);
-
-    // עדכון פרסים
-    for (let i = drops.length - 1; i >= 0; i--) {
-        let d = drops[i];
-        if (d.y < 470) d.y += 2; // נופל עד הרצפה
-        ctx.fillStyle = d.color;
-        ctx.fillRect(d.x - 12, d.y - 12, 24, 24);
-        ctx.fillStyle = "#000"; ctx.font = "16px Arial"; ctx.fillText(d.symbol, d.x - 8, d.y + 5);
-
-        if (Math.abs(player.x - d.x) < 25 && Math.abs(player.y - d.y) < 30) {
-            if (d.type === 'life') { state.lives++; document.getElementById('lives').innerText = state.lives; }
-            if (d.type === 'time') state.time = Math.min(100, state.time + 30);
-            if (d.type === 'shield') player.shield = true;
-            if (d.type === 'weapon') player.maxShots = 2;
-            drops.splice(i, 1);
-        }
+    ctx.fillStyle = "#ff4444";
+    for(let i=0; i<canvas.width; i+=20) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i+10, spikesY); ctx.lineTo(i+20, 0); ctx.fill();
     }
 
-    // צלצלים ובועות (לוגיקה זהה)
+    // שחקן
+    if (keys['ArrowLeft'] && player.x > player.w) player.x -= player.speed;
+    if (keys['ArrowRight'] && player.x < canvas.width - player.w) player.x += player.speed;
+    
+    // ציור שחקן
+    ctx.fillStyle = "#ffcc00";
+    ctx.fillRect(player.x - player.w/2, player.y, player.w, player.h);
+    
+    // בדיקת קוצים (מוות)
+    if (player.y < spikesY + 10) resetPlayer();
+
+    // צלצלים
     for (let i = harpoons.length - 1; i >= 0; i--) {
-        let h = harpoons[i]; h.y -= 12;
-        ctx.strokeStyle = "#ccc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(h.x, canvas.height); ctx.lineTo(h.x, h.y); ctx.stroke();
+        let h = harpoons[i]; h.y -= 10;
+        ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(h.x, canvas.height); ctx.lineTo(h.x, h.y); ctx.stroke();
         if (h.y <= spikesY) harpoons.splice(i, 1);
     }
 
-    for (let index = bubbles.length - 1; index >= 0; index--) {
-        let b = bubbles[index]; b.dy += 0.12; b.x += b.dx; b.y += b.dy;
+    // בועות
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+        let b = bubbles[i];
+        b.dy += 0.15; // כבידה נמוכה יותר
+        b.x += b.dx; b.y += b.dy;
+
+        // התנגשות קירות ורצפה
         if (b.x + b.r > canvas.width || b.x - b.r < 0) b.dx *= -1;
-        if (b.y + b.r > canvas.height) { b.y = canvas.height - b.r; b.dy = -b.r * 0.25 - 3; }
-        
-        ctx.fillStyle = `hsl(${b.hue}, 80%, 60%)`;
+        if (b.y + b.r > canvas.height) { b.y = canvas.height - b.r; b.dy = -8; } // קפיצה מבוקרת
+        if (b.y - b.r < spikesY) b.dy = 2;
+
+        // ציור בועה
+        ctx.fillStyle = `hsl(${b.hue}, 70%, 50%)`;
         ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
 
-        if (Math.abs(player.x - b.x) < b.r + 15 && Math.abs(player.y - 10 - b.y) < b.r + 20) {
-            if (player.shield) { player.shield = false; bubbles.splice(index, 1); } else { loseLife("נפגעת!"); return; }
+        // התנגשות שחקן
+        if (Math.abs(player.x - b.x) < b.r + 10 && Math.abs(player.y + player.h/2 - b.y) < b.r + 10) {
+            resetPlayer();
         }
 
+        // התנגשות צלצל
         for (let j = harpoons.length - 1; j >= 0; j--) {
             let h = harpoons[j];
             if (Math.abs(h.x - b.x) < b.r && h.y < b.y + b.r) {
                 harpoons.splice(j, 1);
-                state.score += 50;
-                // 10% סיכוי לפרס
-                if (Math.random() < 0.1) {
-                    let d = dropTypes[Math.floor(Math.random() * dropTypes.length)];
-                    let newDrop = { x: b.x, y: b.y, type: d.type, color: d.color, symbol: d.symbol };
-                    drops.push(newDrop);
-                    setTimeout(() => { drops = drops.filter(dr => dr !== newDrop); }, 10000);
+                state.score += 100;
+                if (b.r > 15) {
+                    bubbles.push({x: b.x, y: b.y, r: b.r*0.6, dx: -2, dy: -4, hue: b.hue});
+                    bubbles.push({x: b.x, y: b.y, r: b.r*0.6, dx: 2, dy: -4, hue: b.hue});
                 }
-                if (b.r > 18) {
-                    bubbles.push({ x: b.x, y: b.y, r: b.r * 0.6, dx: -2.5, dy: -4, hue: b.hue });
-                    bubbles.push({ x: b.x, y: b.y, r: b.r * 0.6, dx: 2.5, dy: -4, hue: b.hue });
-                }
-                bubbles.splice(index, 1); break;
+                bubbles.splice(i, 1);
             }
         }
     }
 
-    if (bubbles.length === 0) { state.lvl++; document.getElementById('lvl').innerText = state.lvl; initLevel(); }
+    if (bubbles.length === 0) { state.lvl++; initLevel(); }
     document.getElementById('score').innerText = state.score;
     requestAnimationFrame(update);
 }
 
-function loseLife(msg) {
-    state.lives--; document.getElementById('lives').innerText = state.lives;
-    if (state.lives <= 0) { alert("Game Over! ניקוד: " + state.score); location.reload(); }
-    else { alert(msg); initLevel(); }
+function resetPlayer() {
+    state.lives--;
+    document.getElementById('lives').innerText = state.lives;
+    if (state.lives <= 0) { alert("Game Over! נקודות: " + state.score); location.reload(); }
+    player.x = 400; // מחזיר לאמצע בלי לעצור את המשחק
 }
 
 let keys = {};
-window.onkeydown = (e) => { keys[e.key] = true; if (e.key === ' ' && harpoons.length < player.maxShots) harpoons.push({ x: player.x, y: player.y - 20 }); };
+window.onkeydown = (e) => { keys[e.key] = true; if(e.key === ' ') harpoons.push({x: player.x, y: player.y}); };
 window.onkeyup = (e) => keys[e.key] = false;
 
 initLevel();
