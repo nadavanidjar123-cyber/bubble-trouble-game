@@ -1,47 +1,205 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <title>Bubble Trouble - Advanced</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #111; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        canvas { 
+            border: 4px solid #555; 
+            background: linear-gradient(to bottom, #1a2a6c, #11294b, #2b083c); 
+            box-shadow: 0 0 30px rgba(0, 200, 255, 0.3);
+            border-radius: 10px;
+        }
+        #info {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
 
-let player = { x: 300, y: 370, w: 40, h: 20 };
-let bubble = { x: 100, y: 100, dx: 3, dy: 3, r: 20 };
-let harpoon = { x: -10, y: 400, active: false };
+    <div id="info">
+        <span id="levelText">שלב: 1</span>
+        <span id="scoreText">נקודות: 0</span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
 
-window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 20;
-    if (e.key === 'ArrowRight' && player.x < 560) player.x += 20;
-    if (e.key === ' ' && !harpoon.active) {
-        harpoon.x = player.x + 20;
-        harpoon.active = true;
-    }
-});
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-function update() {
-    ctx.clearRect(0, 0, 600, 400);
+        // משתני משחק
+        let currentLevel = 0;
+        let score = 0;
+        let keys = {};
 
-    // ציור השחקן
-    ctx.fillStyle = 'red';
-    ctx.fillRect(player.x, player.y, player.w, player.h);
+        // הגדרות השחקן
+        let player = { x: 380, y: 450, w: 40, h: 50, speed: 5, color: '#00ff88' };
+        
+        // מערכים לצלצלים ובועות
+        let harpoons = [];
+        let bubbles = [];
 
-    // תנועת הבועה
-    bubble.x += bubble.dx;
-    bubble.y += bubble.dy;
-    if (bubble.x > 580 || bubble.x < 20) bubble.dx = -bubble.dx;
-    if (bubble.y > 380 || bubble.y < 20) bubble.dy = -bubble.dy;
-    ctx.fillStyle = 'cyan';
-    ctx.beginPath();
-    ctx.arc(bubble.x, bubble.y, bubble.r, 0, Math.PI * 2);
-    ctx.fill();
+        // מאגר השלבים (כאן תוכל להוסיף עד 50 שלבים!)
+        const levels = [
+            // שלב 1: בועה אחת בינונית
+            [ { x: 100, y: 100, r: 40, dx: 2, dy: 0 } ],
+            // שלב 2: שתי בועות
+            [ { x: 100, y: 100, r: 40, dx: 2.5, dy: 0 }, { x: 700, y: 100, r: 30, dx: -2.5, dy: 0 } ],
+            // שלב 3: בועה ענקית ומהירה
+            [ { x: 400, y: 100, r: 60, dx: 3, dy: 0 } ]
+        ];
 
-    // צלצל
-    if (harpoon.active) {
-        harpoon.y -= 5;
-        ctx.strokeStyle = 'white';
-        ctx.beginPath();
-        ctx.moveTo(harpoon.x, 400);
-        ctx.lineTo(harpoon.x, harpoon.y);
-        ctx.stroke();
-        if (harpoon.y < 0) harpoon.active = false;
-    }
+        // טעינת שלב
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                alert("ניצחת את כל השלבים שהוגדרו!");
+                currentLevel = 0;
+                score = 0;
+                levelIndex = 0;
+            }
+            bubbles = [];
+            harpoons = [];
+            player.x = 380;
+            document.getElementById('levelText').innerText = "שלב: " + (levelIndex + 1);
+            
+            // העתקת הנתונים מהשלב למערך הבועות הפעיל
+            levels[levelIndex].forEach(b => {
+                bubbles.push({ x: b.x, y: b.y, r: b.r, dx: b.dx, dy: b.dy, color: `hsl(${Math.random() * 360}, 100%, 50%)` });
+            });
+        }
 
-    requestAnimationFrame(update);
-}
-update();
+        // מאזינים למקלדת
+        window.addEventListener('keydown', (e) => { 
+            keys[e.key] = true; 
+            // ירייה בלחיצה על רווח
+            if (e.key === ' ' && harpoons.length < 1) { // מותר צלצל אחד בכל פעם כמו במקור
+                harpoons.push({ x: player.x + player.w / 2, y: player.y });
+            }
+        });
+        window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+        function update() {
+            // ניקוי המסך
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // תנועת שחקן
+            if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+            if (keys['ArrowRight'] && player.x + player.w < canvas.width) player.x += player.speed;
+
+            // ציור שחקן (קצת יותר יפה מסתם מלבן)
+            ctx.fillStyle = player.color;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = player.color;
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+            ctx.shadowBlur = 0; // איפוס צללית
+
+            // עדכון וציור צלצלים
+            for (let i = harpoons.length - 1; i >= 0; i--) {
+                let h = harpoons[i];
+                h.y -= 8; // מהירות הצלצל
+                
+                // ציור שרשרת הצלצל
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(h.x, canvas.height);
+                ctx.lineTo(h.x, h.y);
+                ctx.stroke();
+
+                // חוד הצלצל
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.moveTo(h.x - 5, h.y);
+                ctx.lineTo(h.x + 5, h.y);
+                ctx.lineTo(h.x, h.y - 10);
+                ctx.fill();
+
+                if (h.y < 0) harpoons.splice(i, 1); // נמחק כשהגיע למעלה
+            }
+
+            // עדכון וציור בועות
+            for (let i = bubbles.length - 1; i >= 0; i--) {
+                let b = bubbles[i];
+                
+                // פיזיקה (כבידה והתנגשות בקירות)
+                b.dy += 0.15; // כבידה
+                b.x += b.dx;
+                b.y += b.dy;
+
+                if (b.x + b.r > canvas.width || b.x - b.r < 0) b.dx *= -1; // פגיעה בקירות הצדדיים
+                if (b.y + b.r > canvas.height) { // פגיעה ברצפה
+                    b.y = canvas.height - b.r;
+                    b.dy *= -0.95; // קפיצה חזרה
+                }
+
+                // ציור הבועה עם אפקט תלת ממד קל
+                let gradient = ctx.createRadialGradient(b.x - b.r/3, b.y - b.r/3, b.r/10, b.x, b.y, b.r);
+                gradient.addColorStop(0, 'white');
+                gradient.addColorStop(1, b.color);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // בדיקת התנגשות עם השחקן (פסילה)
+                let distToPlayerX = Math.abs(b.x - (player.x + player.w/2));
+                let distToPlayerY = Math.abs(b.y - (player.y + player.h/2));
+                if (distToPlayerX < b.r + player.w/2 && distToPlayerY < b.r + player.h/2) {
+                    alert("נפסלת! מתחילים את השלב מחדש.");
+                    loadLevel(currentLevel);
+                    return requestAnimationFrame(update);
+                }
+
+                // בדיקת התנגשות עם הצלצל (פיצוץ הבועה)
+                for (let j = harpoons.length - 1; j >= 0; j--) {
+                    let h = harpoons[j];
+                    if (h.x > b.x - b.r && h.x < b.x + b.r && h.y < b.y + b.r) {
+                        harpoons.splice(j, 1); // מחיקת הצלצל
+                        
+                        score += 100;
+                        document.getElementById('scoreText').innerText = "נקודות: " + score;
+
+                        // פיצול הבועה ל-2 קטנות יותר (אם היא מספיק גדולה)
+                        if (b.r > 15) {
+                            bubbles.push({ x: b.x, y: b.y, r: b.r - 10, dx: b.dx - 1.5, dy: -4, color: b.color });
+                            bubbles.push({ x: b.x, y: b.y, r: b.r - 10, dx: b.dx + 1.5, dy: -4, color: b.color });
+                        }
+                        bubbles.splice(i, 1); // מחיקת הבועה המקורית
+                        break;
+                    }
+                }
+            }
+
+            // בדיקת מעבר שלב
+            if (bubbles.length === 0) {
+                currentLevel++;
+                loadLevel(currentLevel);
+            } else {
+                requestAnimationFrame(update);
+            }
+        }
+
+        // התחלת המשחק
+        loadLevel(currentLevel);
+        update();
+
+    </script>
+</body>
+</html>
