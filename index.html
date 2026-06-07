@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
+        canvas { border: 2px solid #fff; background: #222; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        // כאן יבוא הלוגיקה של המשחק שלך
+        function draw() {
+            ctx.fillStyle = 'white';
+            ctx.fillText("המשחק שלי בדרך...", 350, 300);
+        }
+        draw();
+    </script>
+</body>
+</html>
