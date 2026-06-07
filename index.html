@@ -1,114 +1,52 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Bubble Trouble - הגרסה המלאה</title>
     <style>
-        body { margin: 0; background-color: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        canvas { border: 4px solid #444; background: #000; display: block; }
+        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { background: #000; border: 2px solid #fff; }
     </style>
 </head>
 <body>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-<canvas id="gameCanvas" width="800" height="500"></canvas>
+        let player = { x: 300, y: 350, w: 50, h: 20 };
+        let bubble = { x: 100, y: 100, r: 20, dx: 2, dy: 2 };
 
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+        function draw() {
+            // ניקוי מסך
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // משתני המשחק
-    let score = 0;
-    let lives = 3;
-    let gameOver = false;
-
-    // הגדרות שחקן
-    let player = { x: 400, y: 450, w: 40, h: 40 };
-    let harpoon = { x: 0, y: 500, active: false };
-    
-    // בועות
-    let bubbles = [{ x: 100, y: 100, dx: 3, dy: 2, r: 30 }];
-
-    // שליטה
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 20;
-        if (e.key === 'ArrowRight' && player.x < 760) player.x += 20;
-        
-        // יריה אחת בלבד
-        if (e.key === ' ' && !harpoon.active) {
-            harpoon.active = true;
-            harpoon.x = player.x + 20;
-            harpoon.y = 450;
-        }
-    });
-
-    function update() {
-        if (gameOver) return;
-
-        ctx.clearRect(0, 0, 800, 500);
-
-        // 1. ציור השחקן (הדמות)
-        ctx.fillStyle = '#FFD700';
-        ctx.fillRect(player.x, player.y, player.w, player.h);
-        ctx.fillStyle = 'red'; // כובע
-        ctx.fillRect(player.x - 5, player.y - 10, 50, 10);
-
-        // 2. ציור צלצל
-        if (harpoon.active) {
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(harpoon.x, 500);
-            ctx.lineTo(harpoon.x, harpoon.y);
-            ctx.stroke();
-            harpoon.y -= 10;
-            if (harpoon.y < 0) harpoon.active = false;
-        }
-
-        // 3. עדכון בועות
-        bubbles.forEach((b, index) => {
-            b.x += b.dx;
-            b.y += b.dy;
-            
-            // התנגשות קירות
-            if (b.x + b.r > 800 || b.x - b.r < 0) b.dx *= -1;
-            if (b.y + b.r > 500) { b.y = 500 - b.r; b.dy = -10; } // קפיצה
-            b.dy += 0.2; // כבידה
+            // ציור שחקן
+            ctx.fillStyle = 'red';
+            ctx.fillRect(player.x, player.y, player.w, player.h);
 
             // ציור בועה
             ctx.fillStyle = 'cyan';
             ctx.beginPath();
-            ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+            ctx.arc(bubble.x, bubble.y, bubble.r, 0, Math.PI * 2);
             ctx.fill();
 
-            // פגיעה בצלצל
-            if (harpoon.active && Math.abs(harpoon.x - b.x) < b.r && harpoon.y < b.y + b.r) {
-                harpoon.active = false;
-                bubbles.splice(index, 1);
-                score += 100;
-                // פיצול בועה
-                if (b.r > 15) {
-                    bubbles.push({ x: b.x, y: b.y, dx: 3, dy: -4, r: b.r / 1.5 });
-                    bubbles.push({ x: b.x, y: b.y, dx: -3, dy: -4, r: b.r / 1.5 });
-                }
-            }
+            // הזזת בועה
+            bubble.x += bubble.dx;
+            bubble.y += bubble.dy;
 
-            // פגיעה בשחקן
-            if (Math.abs(player.x - b.x) < b.r + 20 && Math.abs(player.y - b.y) < b.r + 20) {
-                lives--;
-                if (lives <= 0) gameOver = true;
-                else { player.x = 400; bubbles = [{ x: 100, y: 100, dx: 3, dy: 2, r: 30 }]; }
-            }
+            // קירות
+            if (bubble.x + bubble.r > canvas.width || bubble.x - bubble.r < 0) bubble.dx *= -1;
+            if (bubble.y + bubble.r > canvas.height || bubble.y - bubble.r < 0) bubble.dy *= -1;
+
+            requestAnimationFrame(draw);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 20;
+            if (e.key === 'ArrowRight' && player.x < canvas.width - player.w) player.x += 20;
         });
 
-        // ממשק
-        ctx.fillStyle = 'white';
-        ctx.font = '20px Arial';
-        ctx.fillText('ניקוד: ' + score + ' | חיים: ' + lives, 20, 30);
-
-        requestAnimationFrame(update);
-    }
-
-    update();
-</script>
+        draw();
+    </script>
 </body>
 </html>
