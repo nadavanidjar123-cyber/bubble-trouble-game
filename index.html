@@ -64,194 +64,102 @@ function initLevel() {
 
 function drawPlayer(x, y) {
     if (player.shield) {
-        ctx.beginPath();
-        ctx.arc(x, y - 10, 35, 0, Math.PI*2);
-        ctx.fillStyle = "rgba(0, 200, 255, 0.3)";
-        ctx.fill();
-        ctx.strokeStyle = "#00ccff";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y - 10, 35, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(0, 200, 255, 0.3)"; ctx.fill();
+        ctx.strokeStyle = "#00ccff"; ctx.stroke();
     }
-    // גוף
-    ctx.fillStyle = "#e6b800";
-    ctx.fillRect(x - player.w/2, y - 20, player.w, player.h);
-    // בגדים/סרבל
-    ctx.fillStyle = "#2266cc";
-    ctx.fillRect(x - player.w/2, y, player.w, 20);
-    // כובע
-    ctx.fillStyle = "#cc0000";
-    ctx.beginPath();
-    ctx.arc(x, y - 20, 15, Math.PI, 0);
-    ctx.fill();
+    ctx.fillStyle = "#e6b800"; ctx.fillRect(x - player.w/2, y - 20, player.w, player.h);
+    ctx.fillStyle = "#2266cc"; ctx.fillRect(x - player.w/2, y, player.w, 20);
+    ctx.fillStyle = "#cc0000"; ctx.beginPath(); ctx.arc(x, y - 20, 15, Math.PI, 0); ctx.fill();
     ctx.fillRect(x - 20, y - 20, 40, 4);
-    // עיניים
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(x - 8, y - 10, 6, 6);
-    ctx.fillRect(x + 2, y - 10, 6, 6);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(x - 6, y - 8, 2, 2);
-    ctx.fillRect(x + 4, y - 8, 2, 2);
-}
-
-function drawSpikes() {
-    ctx.fillStyle = "#444";
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = "#000";
-    for(let i=0; i<canvas.width; i+=20) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i+10, spikesY);
-        ctx.lineTo(i+20, 0);
-        ctx.fill();
-    }
-    ctx.shadowBlur = 0;
 }
 
 function update() {
     if (state.gameOver) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // שעון שיורד לאט יותר (0.02 במקום 0.05)
     state.time -= 0.02;
     document.getElementById('time-bar').style.width = state.time + "%";
     if (state.time <= 0) { loseLife("נגמר הזמן!"); return; }
 
-    drawSpikes();
+    // ציור קוצים
+    ctx.fillStyle = "#444";
+    for(let i=0; i<canvas.width; i+=20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i+10, spikesY); ctx.lineTo(i+20, 0); ctx.fill(); }
 
     if (keys['ArrowLeft'] && player.x > player.w/2) player.x -= player.speed;
     if (keys['ArrowRight'] && player.x < canvas.width - player.w/2) player.x += player.speed;
     drawPlayer(player.x, player.y);
 
-    // עדכון פרסים נופלים
+    // עדכון פרסים
     for (let i = drops.length - 1; i >= 0; i--) {
         let d = drops[i];
-        d.y += 2;
+        if (d.y < 470) d.y += 2; // נופל עד הרצפה
         ctx.fillStyle = d.color;
-        ctx.shadowBlur = 10; ctx.shadowColor = d.color;
         ctx.fillRect(d.x - 12, d.y - 12, 24, 24);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "#000";
-        ctx.font = "16px Arial";
-        ctx.fillText(d.symbol, d.x - 8, d.y + 5);
+        ctx.fillStyle = "#000"; ctx.font = "16px Arial"; ctx.fillText(d.symbol, d.x - 8, d.y + 5);
 
-        // איסוף פרס
         if (Math.abs(player.x - d.x) < 25 && Math.abs(player.y - d.y) < 30) {
             if (d.type === 'life') { state.lives++; document.getElementById('lives').innerText = state.lives; }
             if (d.type === 'time') state.time = Math.min(100, state.time + 30);
             if (d.type === 'shield') player.shield = true;
             if (d.type === 'weapon') player.maxShots = 2;
             drops.splice(i, 1);
-            state.score += 20;
-        } else if (d.y > canvas.height) {
-            drops.splice(i, 1);
         }
     }
 
-    // צלצלים
+    // צלצלים ובועות (לוגיקה זהה)
     for (let i = harpoons.length - 1; i >= 0; i--) {
-        let h = harpoons[i];
-        h.y -= 12;
-        ctx.strokeStyle = "#ccc";
-        ctx.lineWidth = 3;
-        ctx.setLineDash([8, 6]);
-        ctx.beginPath();
-        ctx.moveTo(h.x, canvas.height);
-        ctx.lineTo(h.x, h.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        // חוד הצלצל
-        ctx.fillStyle = "#ffaa00";
-        ctx.beginPath(); ctx.moveTo(h.x, h.y - 10); ctx.lineTo(h.x - 6, h.y + 5); ctx.lineTo(h.x + 6, h.y + 5); ctx.fill();
-
+        let h = harpoons[i]; h.y -= 12;
+        ctx.strokeStyle = "#ccc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(h.x, canvas.height); ctx.lineTo(h.x, h.y); ctx.stroke();
         if (h.y <= spikesY) harpoons.splice(i, 1);
     }
 
-    // בועות
     for (let index = bubbles.length - 1; index >= 0; index--) {
-        let b = bubbles[index];
-        b.dy += 0.12; 
-        b.x += b.dx; b.y += b.dy;
-
+        let b = bubbles[index]; b.dy += 0.12; b.x += b.dx; b.y += b.dy;
         if (b.x + b.r > canvas.width || b.x - b.r < 0) b.dx *= -1;
         if (b.y + b.r > canvas.height) { b.y = canvas.height - b.r; b.dy = -b.r * 0.25 - 3; }
-        if (b.y - b.r < spikesY) b.dy = 2;
-
-        let grad = ctx.createRadialGradient(b.x - b.r/3, b.y - b.r/3, 2, b.x, b.y, b.r);
-        grad.addColorStop(0, '#fff'); grad.addColorStop(0.3, `hsl(${b.hue}, 80%, 60%)`); grad.addColorStop(1, `hsl(${b.hue}, 100%, 30%)`);
-        ctx.fillStyle = grad;
-        ctx.shadowBlur = 15; ctx.shadowColor = `hsl(${b.hue}, 100%, 50%)`;
+        
+        ctx.fillStyle = `hsl(${b.hue}, 80%, 60%)`;
         ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0;
 
-        // פגיעה של שחקן
         if (Math.abs(player.x - b.x) < b.r + 15 && Math.abs(player.y - 10 - b.y) < b.r + 20) {
-            if (player.shield) {
-                player.shield = false;
-                bubbles.splice(index, 1);
-                continue;
-            } else {
-                loseLife("נפגעת מבועה!");
-                return;
-            }
+            if (player.shield) { player.shield = false; bubbles.splice(index, 1); } else { loseLife("נפגעת!"); return; }
         }
 
-        // פגיעה של צלצל
-        let hit = false;
         for (let j = harpoons.length - 1; j >= 0; j--) {
             let h = harpoons[j];
             if (Math.abs(h.x - b.x) < b.r && h.y < b.y + b.r) {
                 harpoons.splice(j, 1);
                 state.score += 50;
-                
-                // הגרלת פרס (25% סיכוי)
-                if (Math.random() < 0.25) {
-                    let randomDrop = dropTypes[Math.floor(Math.random() * dropTypes.length)];
-                    drops.push({ x: b.x, y: b.y, type: randomDrop.type, color: randomDrop.color, symbol: randomDrop.symbol });
+                // 10% סיכוי לפרס
+                if (Math.random() < 0.1) {
+                    let d = dropTypes[Math.floor(Math.random() * dropTypes.length)];
+                    let newDrop = { x: b.x, y: b.y, type: d.type, color: d.color, symbol: d.symbol };
+                    drops.push(newDrop);
+                    setTimeout(() => { drops = drops.filter(dr => dr !== newDrop); }, 10000);
                 }
-
                 if (b.r > 18) {
                     bubbles.push({ x: b.x, y: b.y, r: b.r * 0.6, dx: -2.5, dy: -4, hue: b.hue });
                     bubbles.push({ x: b.x, y: b.y, r: b.r * 0.6, dx: 2.5, dy: -4, hue: b.hue });
                 }
-                bubbles.splice(index, 1);
-                hit = true;
-                break;
+                bubbles.splice(index, 1); break;
             }
         }
-        if(hit) continue;
     }
 
-    if (bubbles.length === 0) {
-        state.lvl++;
-        document.getElementById('lvl').innerText = state.lvl;
-        initLevel();
-    }
-
+    if (bubbles.length === 0) { state.lvl++; document.getElementById('lvl').innerText = state.lvl; initLevel(); }
     document.getElementById('score').innerText = state.score;
     requestAnimationFrame(update);
 }
 
 function loseLife(msg) {
-    state.lives--;
-    document.getElementById('lives').innerText = state.lives;
-    if (state.lives <= 0) {
-        state.gameOver = true;
-        alert("Game Over! סופי. ניקוד: " + state.score);
-        location.reload();
-    } else {
-        alert(msg + " נשארו לך " + state.lives + " חיים.");
-        initLevel();
-        update();
-    }
+    state.lives--; document.getElementById('lives').innerText = state.lives;
+    if (state.lives <= 0) { alert("Game Over! ניקוד: " + state.score); location.reload(); }
+    else { alert(msg); initLevel(); }
 }
 
 let keys = {};
-window.onkeydown = (e) => { 
-    keys[e.key] = true; 
-    if (e.key === ' ' && harpoons.length < player.maxShots) { 
-        harpoons.push({ x: player.x, y: player.y - 20 }); 
-    }
-};
+window.onkeydown = (e) => { keys[e.key] = true; if (e.key === ' ' && harpoons.length < player.maxShots) harpoons.push({ x: player.x, y: player.y - 20 }); };
 window.onkeyup = (e) => keys[e.key] = false;
 
 initLevel();
