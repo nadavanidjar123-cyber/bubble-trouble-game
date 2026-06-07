@@ -2,21 +2,31 @@
 <html>
 <head>
     <style>
-        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #000; }
-        canvas { border: 2px solid #fff; background: #222; }
+        body { margin: 0; background: #000; overflow: hidden; }
+        canvas { display: block; border: 2px solid white; margin: 50px auto; }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        // כאן יבוא הלוגיקה של המשחק שלך
-        function draw() {
-            ctx.fillStyle = 'white';
-            ctx.fillText("המשחק שלי בדרך...", 350, 300);
+        let x = 300, y = 200, dx = 2, dy = 2;
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fillStyle = 'cyan';
+            ctx.fill();
+            
+            x += dx; y += dy;
+            if (x > 580 || x < 20) dx = -dx;
+            if (y > 380 || y < 20) dy = -dy;
+            
+            requestAnimationFrame(update);
         }
-        draw();
+        update();
     </script>
 </body>
 </html>
