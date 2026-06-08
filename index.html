@@ -68,7 +68,10 @@
   let levelClearTimer = 0;
   let shakeAmt = 0;
 
-  const MAX_LEVEL = 10;
+  const MAX_LEVEL = 60;
+  const CEILING_Y = 60;
+  const SPIKE_H = 14;
+  const SPIKE_W = 22;
 
   const player = {
     x: W/2, y: H - 40,
@@ -123,6 +126,20 @@
     ['#ff3322','#ff8866']
   ];
 
+  // Hand-designed first 10 levels, then procedural with ramping difficulty
+  const LEVEL_DESIGNS = {
+    1:  [[0.30, 150, 3,  80]],
+    2:  [[0.25, 150, 3, 100], [0.75, 200, 2, -90]],
+    3:  [[0.20, 150, 4,  70]],
+    4:  [[0.30, 150, 3, 110], [0.70, 250, 3, -110]],
+    5:  [[0.15,100,2,120],[0.35,200,2,-120],[0.55,100,2,120],[0.75,200,2,-120]],
+    6:  [[0.50, 150, 4,  90], [0.20, 250, 2, -130]],
+    7:  [[0.30, 150, 4, 100], [0.70, 200, 3, -120]],
+    8:  [[0.20,150,3,130],[0.50,150,3,-130],[0.80,150,3,130]],
+    9:  [[0.50, 100, 4, 140], [0.20, 300, 2, -160], [0.80, 300, 2, 160]],
+    10: [[0.25, 100, 4, 130], [0.75, 100, 4, -130]],
+  };
+
   function makeLevel(n) {
     bubbles = [];
     harpoons = [];
@@ -130,35 +147,92 @@
     powerups = [];
     const palette = LEVEL_COLORS[(n-1) % LEVEL_COLORS.length];
     levelTimer = 0;
-    maxLevelTime = 50 + n * 8;
+    maxLevelTime = 50 + Math.min(n, 30) * 5;
 
-    if (n === 1) {
-      spawnBubble(W*0.3, 150, 3, 80, palette);
-    } else if (n === 2) {
-      spawnBubble(W*0.25, 150, 3, 100, palette);
-      spawnBubble(W*0.75, 200, 2, -90, palette);
-    } else if (n === 3) {
-      spawnBubble(W*0.2, 150, 4, 70, palette);
-    } else if (n === 4) {
-      spawnBubble(W*0.3, 150, 3, 110, palette);
-      spawnBubble(W*0.7, 250, 3, -110, palette);
-    } else if (n === 5) {
-      for (let i = 0; i < 4; i++) spawnBubble(150 + i*180, 100 + (i%2)*100, 2, i%2?120:-120, palette);
-    } else if (n === 6) {
-      spawnBubble(W*0.5, 150, 4, 90, palette);
-      spawnBubble(W*0.2, 250, 2, -130, palette);
-    } else if (n === 7) {
-      spawnBubble(W*0.3, 150, 4, 100, palette);
-      spawnBubble(W*0.7, 200, 3, -120, palette);
-    } else if (n === 8) {
-      for (let i = 0; i < 3; i++) spawnBubble(200 + i*250, 150, 3, i%2?130:-130, palette);
-    } else if (n === 9) {
-      spawnBubble(W*0.5, 100, 4, 140, palette);
-      spawnBubble(W*0.2, 300, 2, -160, palette);
-      spawnBubble(W*0.8, 300, 2, 160, palette);
-    } else if (n === 10) {
-      spawnBubble(W*0.25, 100, 4, 130, palette);
-      spawnBubble(W*0.75, 100, 4, -130, palette);
+    if (LEVEL_DESIGNS[n]) {
+      for (const [fx, y, size, vx] of LEVEL_DESIGNS[n]) {
+        spawnBubble(W * fx, y, size, vx, palette);
+      }
+      return;
+    }
+
+    // Procedural for levels 11+
+    // Difficulty ramps: more bubbles, larger, faster, more huge ones
+    const tier = Math.floor((n - 11) / 10); // 0..4
+    const speedMul = 1 + tier * 0.18 + ((n - 11) % 10) * 0.02;
+    const rng = mulberry32(n * 9301 + 49297);
+
+    // Choose composition based on level number
+    const patterns = [
+      // big chain
+      () => {
+        const count = 1 + Math.min(3, Math.floor(n / 18));
+        for (let i = 0; i < count; i++) {
+          const fx = 0.2 + (i / Math.max(1, count - 1)) * 0.6;
+          spawnBubble(W*fx, 120 + i*40, 4, (i%2?1:-1) * (90 + tier*20) * speedMul, palette);
+        }
+      },
+      // medium swarm
+      () => {
+        const count = 3 + Math.min(5, Math.floor(n / 8));
+        for (let i = 0; i < count; i++) {
+          spawnBubble(120 + i * (W-240)/(count-1), 100 + (i%2)*120, 3,
+                     (i%2?1:-1) * (100 + tier*25) * speedMul, palette);
+        }
+      },
+      // small army
+      () => {
+        const count = 6 + Math.min(6, Math.floor(n / 6));
+        for (let i = 0; i < count; i++) {
+          spawnBubble(80 + i * (W-160)/(count-1), 100 + (i%3)*80, 2,
+                     (i%2?1:-1) * (130 + tier*20) * speedMul, palette);
+        }
+      },
+      // mixed assault
+      () => {
+        spawnBubble(W*0.5, 100, 4, 100 * speedMul, palette);
+        spawnBubble(W*0.2, 250, 3, -130 * speedMul, palette);
+        spawnBubble(W*0.8, 250, 3, 130 * speedMul, palette);
+        if (n >= 20) spawnBubble(W*0.5, 350, 2, 150 * speedMul, palette);
+      },
+      // pyramid
+      () => {
+        spawnBubble(W*0.5, 80, 4, 90 * speedMul, palette);
+        spawnBubble(W*0.3, 200, 3, -110 * speedMul, palette);
+        spawnBubble(W*0.7, 200, 3, 110 * speedMul, palette);
+        if (n >= 25) {
+          spawnBubble(W*0.2, 320, 2, -140 * speedMul, palette);
+          spawnBubble(W*0.8, 320, 2, 140 * speedMul, palette);
+        }
+      },
+      // crossfire
+      () => {
+        const rows = Math.min(3, 1 + Math.floor(n / 20));
+        for (let r = 0; r < rows; r++) {
+          spawnBubble(50, 120 + r*100, 3, (120 + tier*20) * speedMul, palette);
+          spawnBubble(W-50, 120 + r*100, 3, -(120 + tier*20) * speedMul, palette);
+        }
+      },
+      // huge boss
+      () => {
+        spawnBubble(W*0.3, 100, 4, 80 * speedMul, palette);
+        spawnBubble(W*0.7, 100, 4, -80 * speedMul, palette);
+        if (n >= 30) spawnBubble(W*0.5, 250, 3, 150 * speedMul, palette);
+      },
+    ];
+
+    let pIdx = Math.floor(rng() * patterns.length);
+    // Boss every 10 levels: force "huge boss" pattern
+    if (n % 10 === 0) pIdx = patterns.length - 1;
+    patterns[pIdx]();
+  }
+
+  function mulberry32(a) {
+    return function() {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
     }
   }
 
@@ -171,9 +245,12 @@
   }
 
   function spawnBubble(x, y, size, vx, palette) {
+    const r = bubbleRadius(size);
+    const minY = CEILING_Y + SPIKE_H + r + 8;
+    if (y < minY) y = minY;
     bubbles.push({
       x, y,
-      r: bubbleRadius(size),
+      r,
       vx: vx,
       vy: 0,
       size,
@@ -197,12 +274,15 @@
         color: b.color2
       });
     }
-    if (Math.random() < 0.12) {
-      const types = ['life','slow','double'];
+    if (Math.random() < 0.18) {
+      const types = ['life','slow','double','shield','triple','freeze','bomb','magnet'];
       powerups.push({
         x: b.x, y: b.y, vy: 60,
         type: types[Math.floor(Math.random()*types.length)],
-        bob: 0
+        bob: 0,
+        onFloor: false,
+        floorTimer: 0,
+        spawnAge: 0
       });
     }
     if (b.size > 1) {
@@ -267,7 +347,7 @@
     if (move !== 0) player.walkPhase += dt * 10;
 
     player.cooldown -= dt;
-    const maxHarpoons = hasDouble ? 2 : 1;
+    const maxHarpoons = hasTriple ? 3 : (hasDouble ? 2 : 1);
     if (keys['Space'] && player.cooldown <= 0 && harpoons.length < maxHarpoons) {
       harpoons.push({
         x: player.x,
@@ -283,13 +363,23 @@
     harpoons = harpoons.filter(h => h.topY > 10);
 
     const gravity = 380;
-    const slowFactor = slowTimer > 0 ? 0.5 : 1;
+    const isFrozen = freezeTimer > 0;
+    const slowFactor = isFrozen ? 0 : (slowTimer > 0 ? 0.5 : 1);
     if (slowTimer > 0) slowTimer -= dt;
+    if (freezeTimer > 0) freezeTimer -= dt;
     if (doubleTimer > 0) {
       doubleTimer -= dt;
       if (doubleTimer <= 0) hasDouble = false;
     }
-    for (const b of bubbles) {
+    if (tripleTimer > 0) {
+      tripleTimer -= dt;
+      if (tripleTimer <= 0) hasTriple = false;
+    }
+    if (magnetTimer > 0) magnetTimer -= dt;
+
+    // Bubbles physics + spike collisions
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i];
       b.wobble += dt * 3;
       b.x += b.vx * dt * slowFactor;
       b.y += b.vy * dt * slowFactor;
@@ -301,7 +391,13 @@
         const bh = [0, 320, 380, 440, 500][b.size];
         b.vy = -bh;
       }
-      if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); }
+      // Ceiling spikes — pop the bubble if it reaches them
+      if (b.y - b.r < CEILING_Y + SPIKE_H) {
+        bubbles.splice(i, 1);
+        splitBubble(b);
+        shakeAmt = Math.max(shakeAmt, 6);
+        continue;
+      }
     }
 
     for (let i = harpoons.length - 1; i >= 0; i--) {
@@ -337,12 +433,33 @@
 
     for (let i = powerups.length - 1; i >= 0; i--) {
       const p = powerups[i];
-      p.y += p.vy * dt;
+      p.spawnAge += dt;
       p.bob += dt * 4;
-      if (p.y > H - 30) { powerups.splice(i,1); continue; }
+      if (!p.onFloor) {
+        p.y += p.vy * dt;
+        if (p.y >= H - 32) {
+          p.y = H - 32;
+          p.onFloor = true;
+          p.floorTimer = 5;
+        }
+      } else {
+        p.floorTimer -= dt;
+        if (p.floorTimer <= 0) { powerups.splice(i,1); continue; }
+      }
+      // Magnet effect: pull powerups toward player
+      if (magnetTimer > 0) {
+        const dx = player.x - p.x;
+        const dy = player.y - p.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d > 1) {
+          const pull = 260 * dt;
+          p.x += (dx/d) * pull;
+          if (!p.onFloor) p.y += (dy/d) * pull;
+        }
+      }
       const dx = p.x - player.x;
       const dy = p.y - player.y;
-      if (dx*dx + dy*dy < 30*30) {
+      if (dx*dx + dy*dy < 32*32) {
         applyPowerup(p.type);
         powerups.splice(i,1);
       }
@@ -363,17 +480,37 @@
   let slowTimer = 0;
   let hasDouble = false;
   let doubleTimer = 0;
+  let hasTriple = false;
+  let tripleTimer = 0;
+  let freezeTimer = 0;
+  let magnetTimer = 0;
+  let shieldCharges = 0;
 
   function applyPowerup(type) {
     if (type === 'life') lives = Math.min(lives + 1, 5);
     if (type === 'slow') slowTimer = 6;
     if (type === 'double') { hasDouble = true; doubleTimer = 8; }
-    for (let i = 0; i < 20; i++) {
+    if (type === 'triple') { hasTriple = true; tripleTimer = 6; }
+    if (type === 'freeze') freezeTimer = 3;
+    if (type === 'shield') shieldCharges = Math.min(shieldCharges + 1, 3);
+    if (type === 'magnet') magnetTimer = 7;
+    if (type === 'bomb') {
+      // Pop ALL smallest bubbles instantly
+      for (let i = bubbles.length - 1; i >= 0; i--) {
+        if (bubbles[i].size === 1) {
+          const b = bubbles[i];
+          bubbles.splice(i, 1);
+          splitBubble(b);
+        }
+      }
+      shakeAmt = 14;
+    }
+    for (let i = 0; i < 22; i++) {
       const ang = Math.random()*Math.PI*2;
       particles.push({
         x: player.x, y: player.y,
-        vx: Math.cos(ang)*120, vy: Math.sin(ang)*120 - 80,
-        life: 0.8, max: 0.8, r: 3, color: '#ffe066'
+        vx: Math.cos(ang)*140, vy: Math.sin(ang)*140 - 90,
+        life: 0.9, max: 0.9, r: 3, color: '#ffe066'
       });
     }
   }
@@ -390,6 +527,20 @@
 
   function damagePlayer() {
     if (player.invuln > 0) return;
+    if (shieldCharges > 0) {
+      shieldCharges--;
+      player.invuln = 1.2;
+      shakeAmt = 14;
+      for (let i = 0; i < 30; i++) {
+        const ang = Math.random()*Math.PI*2;
+        particles.push({
+          x: player.x, y: player.y - 5,
+          vx: Math.cos(ang)*220, vy: Math.sin(ang)*220,
+          life: 0.6, max: 0.6, r: 3, color: '#66ccff'
+        });
+      }
+      return;
+    }
     lives--;
     player.invuln = 2;
     shakeAmt = 20;
@@ -417,6 +568,7 @@
       drawMenu();
     } else {
       drawFloor();
+      drawCeiling();
       drawBubbles();
       drawPowerups();
       drawPlayer();
@@ -484,6 +636,44 @@
     ctx.beginPath();
     ctx.moveTo(0, H-20); ctx.lineTo(W, H-20);
     ctx.stroke();
+  }
+
+  function drawCeiling() {
+    // Stone bar at the top
+    const baseTop = CEILING_Y - 10;
+    const bg = ctx.createLinearGradient(0, baseTop, 0, CEILING_Y + 4);
+    bg.addColorStop(0, '#2a2a35');
+    bg.addColorStop(1, '#444455');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, baseTop, W, 14);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(0, CEILING_Y + 4); ctx.lineTo(W, CEILING_Y + 4);
+    ctx.stroke();
+
+    // Spikes
+    const count = Math.ceil(W / SPIKE_W);
+    for (let i = 0; i < count; i++) {
+      const x = i * SPIKE_W;
+      const g = ctx.createLinearGradient(0, CEILING_Y, 0, CEILING_Y + SPIKE_H);
+      g.addColorStop(0, '#bfc7d4');
+      g.addColorStop(0.5, '#8e96a4');
+      g.addColorStop(1, '#3a3f4a');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x, CEILING_Y);
+      ctx.lineTo(x + SPIKE_W, CEILING_Y);
+      ctx.lineTo(x + SPIKE_W/2, CEILING_Y + SPIKE_H);
+      ctx.closePath();
+      ctx.fill();
+      // highlight
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 1, CEILING_Y + 1);
+      ctx.lineTo(x + SPIKE_W/2, CEILING_Y + SPIKE_H - 2);
+      ctx.stroke();
+    }
   }
 
   function drawBubbles() {
@@ -601,28 +791,59 @@
     ctx.fillRect(cx - 2, cy - 15, 4, 6);
 
     if (blink) ctx.restore();
+
+    // Shield bubble around player
+    if (shieldCharges > 0) {
+      const t = performance.now() / 1000;
+      const r = 32 + Math.sin(t*5)*2;
+      const sg = ctx.createRadialGradient(cx, cy - 5, r*0.4, cx, cy - 5, r);
+      sg.addColorStop(0, 'rgba(102,255,204,0)');
+      sg.addColorStop(0.7, 'rgba(102,255,204,0.15)');
+      sg.addColorStop(1, 'rgba(102,255,204,0.55)');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 5, r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(150,255,220,${0.6 + Math.sin(t*5)*0.2})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
 
   function drawPowerups() {
     for (const p of powerups) {
-      const y = p.y + Math.sin(p.bob)*3;
-      const g = ctx.createRadialGradient(p.x, y, 0, p.x, y, 25);
-      g.addColorStop(0, 'rgba(255,255,200,0.6)');
-      g.addColorStop(1, 'rgba(255,255,200,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(p.x - 25, y - 25, 50, 50);
+      // Flash when about to disappear (last 1.5s on floor)
+      const blinking = p.onFloor && p.floorTimer < 1.5;
+      if (blinking && Math.floor(p.floorTimer * 8) % 2 === 0) continue;
+
+      const bobAmt = p.onFloor ? 1.5 : 3;
+      const y = p.y + Math.sin(p.bob)*bobAmt;
+
       let col = '#ffcc44', sym = '?';
-      if (p.type === 'life') { col = '#ff4466'; sym = '♥'; }
-      if (p.type === 'slow') { col = '#44aaff'; sym = '⧗'; }
+      if (p.type === 'life')   { col = '#ff4466'; sym = '♥'; }
+      if (p.type === 'slow')   { col = '#44aaff'; sym = '⧗'; }
       if (p.type === 'double') { col = '#aa66ff'; sym = '⇈'; }
+      if (p.type === 'triple') { col = '#ff66cc'; sym = '⫶'; }
+      if (p.type === 'freeze') { col = '#88ddff'; sym = '❄'; }
+      if (p.type === 'shield') { col = '#66ffcc'; sym = '⛨'; }
+      if (p.type === 'bomb')   { col = '#ff8833'; sym = '✸'; }
+      if (p.type === 'magnet') { col = '#dd4444'; sym = 'U'; }
+
+      // glow
+      const gg = ctx.createRadialGradient(p.x, y, 0, p.x, y, 25);
+      gg.addColorStop(0, withAlpha(col, 0.55));
+      gg.addColorStop(1, withAlpha(col, 0));
+      ctx.fillStyle = gg;
+      ctx.fillRect(p.x - 25, y - 25, 50, 50);
+
       ctx.fillStyle = col;
-      roundRect(p.x - 12, y - 12, 24, 24, 5);
+      roundRect(p.x - 13, y - 13, 26, 26, 6);
       ctx.fill();
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 16px serif';
+      ctx.font = 'bold 17px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(sym, p.x, y + 1);
@@ -666,18 +887,14 @@
     ctx.fillRect(10, 44, (W - 20) * Math.max(0, tFrac), 6);
 
     let py = 60;
-    if (slowTimer > 0) {
-      ctx.fillStyle = '#44aaff';
-      ctx.textAlign = 'left';
-      ctx.font = '14px Segoe UI';
-      ctx.fillText(`⧗ Slow ${slowTimer.toFixed(1)}s`, 12, py); py += 18;
-    }
-    if (doubleTimer > 0) {
-      ctx.fillStyle = '#aa66ff';
-      ctx.textAlign = 'left';
-      ctx.font = '14px Segoe UI';
-      ctx.fillText(`⇈ Double ${doubleTimer.toFixed(1)}s`, 12, py);
-    }
+    ctx.textAlign = 'left';
+    ctx.font = '14px Segoe UI';
+    if (slowTimer > 0)   { ctx.fillStyle = '#44aaff'; ctx.fillText(`⧗ Slow ${slowTimer.toFixed(1)}s`, 12, py); py += 18; }
+    if (doubleTimer > 0) { ctx.fillStyle = '#aa66ff'; ctx.fillText(`⇈ Double ${doubleTimer.toFixed(1)}s`, 12, py); py += 18; }
+    if (tripleTimer > 0) { ctx.fillStyle = '#ff66cc'; ctx.fillText(`⫶ Triple ${tripleTimer.toFixed(1)}s`, 12, py); py += 18; }
+    if (freezeTimer > 0) { ctx.fillStyle = '#88ddff'; ctx.fillText(`❄ Freeze ${freezeTimer.toFixed(1)}s`, 12, py); py += 18; }
+    if (magnetTimer > 0) { ctx.fillStyle = '#dd4444'; ctx.fillText(`U Magnet ${magnetTimer.toFixed(1)}s`, 12, py); py += 18; }
+    if (shieldCharges > 0) { ctx.fillStyle = '#66ffcc'; ctx.fillText(`⛨ Shield x${shieldCharges}`, 12, py); py += 18; }
   }
 
   function drawHeart(x, y, r) {
@@ -728,7 +945,7 @@
     ctx.fillStyle = '#aab';
     ctx.fillText('חצים לתזוזה  ·  רווח לירייה  ·  P להשהיה', W/2, H/2 + 75);
     ctx.fillText('פוצץ את כל הבועות בכל שלב כדי להתקדם', W/2, H/2 + 100);
-    ctx.fillText(`${MAX_LEVEL} שלבים · 3 חיים · בונוס זמן`, W/2, H/2 + 125);
+    ctx.fillText(`${MAX_LEVEL} שלבים · קוצים בתקרה · 8 פאוור-אפס`, W/2, H/2 + 125);
   }
 
   function drawLevelClear() {
@@ -849,6 +1066,8 @@
   function resetAll() {
     level = 1; score = 0; lives = 3;
     slowTimer = 0; hasDouble = false; doubleTimer = 0;
+    hasTriple = false; tripleTimer = 0;
+    freezeTimer = 0; magnetTimer = 0; shieldCharges = 0;
     player.x = W/2; player.invuln = 0;
     bubbles = []; harpoons = []; particles = []; powerups = [];
   }
