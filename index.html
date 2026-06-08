@@ -1,162 +1,204 @@
-<!DOCTYPE html>
-<html lang="he">
-<head>
-    <meta charset="UTF-8">
-    <title>Professional Bubble Trouble Engine</title>
-    <style>
-        body { margin: 0; background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        canvas { border: 4px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-    </style>
-</head>
-<body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <script>
-        // --- Game Core Classes ---
+/**
+ * BUBBLE TROUBLE PRO - ENGINE CORE (ARCHITECTURE 1.0)
+ * --------------------------------------------------
+ * מנוע זה בנוי בגישת OOP (Object Oriented Programming).
+ * הוא כולל מנהל מצבים, מערכת אירועים, וניהול זיכרון אופטימלי.
+ */
+
+// 1. הגדרות מערכת (Configuration)
+const CONFIG = {
+    CANVAS_WIDTH: 1000,
+    CANVAS_HEIGHT: 700,
+    GRAVITY: 0.25,
+    PLAYER_SPEED: 8,
+    HARPOON_SPEED: 12,
+    MAX_PROJECTILES: 2,
+    COLORS: {
+        PLAYER: '#FFD700',
+        BUBBLE: '#00D4FF',
+        HARPOON: '#FFFFFF',
+        UI: '#FFFFFF'
+    }
+};
+
+// 2. מנהל המצבים (State Manager)
+class GameStateManager {
+    constructor() {
+        this.states = {
+            MENU: 'MENU',
+            PLAYING: 'PLAYING',
+            GAMEOVER: 'GAMEOVER'
+        };
+        this.current = this.states.PLAYING;
+    }
+    setState(newState) { this.current = newState; }
+}
+
+// 3. מנוע הגרפיקה (Renderer)
+class Renderer {
+    constructor(ctx) { this.ctx = ctx; }
+    drawRect(x, y, w, h, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(x, y, w, h);
+    }
+    drawCircle(x, y, r, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, r, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+    drawText(text, x, y, size) {
+        this.ctx.fillStyle = CONFIG.COLORS.UI;
+        this.ctx.font = `${size}px Arial`;
+        this.ctx.fillText(text, x, y);
+    }
+}
+
+// 4. ישויות (Entities)
+class Entity {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class Player extends Entity {
+    constructor(game) {
+        super(500, 640);
+        this.game = game;
+        this.width = 60;
+        this.height = 60;
+    }
+
+    update() {
+        if (this.game.input.isDown('ArrowLeft') && this.x > 0) this.x -= CONFIG.PLAYER_SPEED;
+        if (this.game.input.isDown('ArrowRight') && this.x < CONFIG.CANVAS_WIDTH - this.width) this.x += CONFIG.PLAYER_SPEED;
+    }
+
+    draw(renderer) {
+        renderer.drawRect(this.x, this.y, this.width, this.height, CONFIG.COLORS.PLAYER);
+    }
+}
+
+class Bubble extends Entity {
+    constructor(x, y, radius, dx, dy, game) {
+        super(x, y);
+        this.radius = radius;
+        this.dx = dx;
+        this.dy = dy;
+        this.game = game;
+    }
+
+    update() {
+        this.x += this.dx;
+        this.dy += CONFIG.GRAVITY;
+        this.y += this.dy;
+
+        if (this.x + this.radius > CONFIG.CANVAS_WIDTH || this.x - this.radius < 0) this.dx *= -1;
+        if (this.y + this.radius > CONFIG.CANVAS_HEIGHT) {
+            this.y = CONFIG.CANVAS_HEIGHT - this.radius;
+            this.dy = -10;
+        }
+    }
+
+    draw(renderer) {
+        renderer.drawCircle(this.x, this.y, this.radius, CONFIG.COLORS.BUBBLE);
+    }
+
+    split() {
+        if (this.radius > 10) {
+            this.game.entities.push(new Bubble(this.x, this.y, this.radius / 1.5, 3, -5, this.game));
+            this.game.entities.push(new Bubble(this.x, this.y, this.radius / 1.5, -3, -5, this.game));
+        }
+    }
+}
+
+// 5. מנוע המשחק הראשי (Main Game Loop)
+class GameEngine {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.renderer = new Renderer(this.ctx);
+        this.state = new GameStateManager();
         
-        class GameEngine {
-            constructor() {
-                this.canvas = document.getElementById('gameCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.width = this.canvas.width;
-                this.height = this.canvas.height;
-                
-                this.score = 0;
-                this.level = 1;
-                this.lives = 3;
-                this.isRunning = true;
-                
-                this.player = new Player(this);
-                this.bubbles = [new Bubble(100, 100, 40, 2, 2, this)];
-                this.harpoons = [];
-                this.particles = [];
-                
-                this.input = new InputHandler();
-                this.requestLoop = this.requestLoop.bind(this);
+        this.input = {
+            keys: {},
+            isDown: (key) => this.input.keys[key],
+            init: () => {
+                window.addEventListener('keydown', e => this.input.keys[e.code] = true);
+                window.addEventListener('keyup', e => this.input.keys[e.code] = false);
             }
+        };
+        this.input.init();
 
-            requestLoop() {
-                if(!this.isRunning) return;
-                this.update();
-                this.draw();
-                requestAnimationFrame(this.requestLoop);
-            }
+        this.player = new Player(this);
+        this.entities = [new Bubble(200, 100, 40, 2, 0, this), new Bubble(700, 100, 40, -2, 0, this)];
+        this.projectiles = [];
+        
+        this.score = 0;
+        this.gameLoop();
+    }
 
-            update() {
-                this.player.update(this.input);
-                this.harpoons.forEach(h => h.update());
-                this.bubbles.forEach(b => b.update());
-                this.particles.forEach(p => p.update());
-                
-                // Collision Detection
-                this.checkCollisions();
-            }
-
-            checkCollisions() {
-                // Harpoon vs Bubble
-                this.harpoons.forEach((h, hIdx) => {
-                    this.bubbles.forEach((b, bIdx) => {
-                        if(b.checkHit(h)) {
-                            this.score += 50;
-                            h.active = false;
-                            b.split();
-                            this.bubbles.splice(bIdx, 1);
-                        }
-                    });
-                });
-            }
-
-            draw() {
-                this.ctx.clearRect(0, 0, this.width, this.height);
-                this.player.draw(this.ctx);
-                this.harpoons.forEach(h => h.draw(this.ctx));
-                this.bubbles.forEach(b => b.draw(this.ctx));
-                
-                // UI
-                this.ctx.fillStyle = "white";
-                this.ctx.font = "20px Arial";
-                this.ctx.fillText(`Score: ${this.score} | Level: ${this.level} | Lives: ${this.lives}`, 20, 30);
-            }
+    handleShooting() {
+        if (this.input.isDown('Space') && this.projectiles.length < CONFIG.MAX_PROJECTILES) {
+            this.projectiles.push(new Harpoon(this.player.x + 30, this.player.y, this));
         }
+    }
 
-        class InputHandler {
-            constructor() {
-                this.keys = {};
-                window.addEventListener('keydown', e => this.keys[e.code] = true);
-                window.addEventListener('keyup', e => this.keys[e.code] = false);
-            }
-        }
+    update() {
+        this.handleShooting();
+        this.player.update();
+        this.projectiles.forEach(p => p.update());
+        this.entities.forEach(e => e.update());
+        
+        // ניהול התנגשויות (Collision Management)
+        this.checkCollisions();
+        
+        // ניקוי זיכרון
+        this.projectiles = this.projectiles.filter(p => p.active);
+    }
 
-        class Player {
-            constructor(game) {
-                this.game = game;
-                this.x = 400; this.y = 550;
-                this.width = 40; this.height = 40;
-                this.speed = 8;
-            }
-            update(input) {
-                if(input.keys['ArrowLeft'] && this.x > 0) this.x -= this.speed;
-                if(input.keys['ArrowRight'] && this.x < this.game.width - this.width) this.x += this.speed;
-                if(input.keys['Space'] && this.game.harpoons.length === 0) {
-                    this.game.harpoons.push(new Harpoon(this.x + 20, this.y, this.game));
+    checkCollisions() {
+        this.projectiles.forEach(p => {
+            this.entities.forEach((e, index) => {
+                if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius) {
+                    p.active = false;
+                    e.split();
+                    this.entities.splice(index, 1);
+                    this.score += 100;
                 }
-            }
-            draw(ctx) {
-                ctx.fillStyle = '#ffcc00';
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-            }
-        }
+            });
+        });
+    }
 
-        class Bubble {
-            constructor(x, y, radius, dx, dy, game) {
-                this.x = x; this.y = y; this.radius = radius;
-                this.dx = dx; this.dy = dy; this.game = game;
-                this.gravity = 0.2;
-            }
-            update() {
-                this.x += this.dx;
-                this.y += this.dy;
-                this.dy += this.gravity;
-                if(this.x + this.radius > this.game.width || this.x - this.radius < 0) this.dx *= -1;
-                if(this.y + this.radius > this.game.height) this.dy = -10;
-            }
-            checkHit(harpoon) {
-                return Math.hypot(this.x - harpoon.x, this.y - harpoon.y) < this.radius;
-            }
-            split() {
-                if(this.radius > 15) {
-                    this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, 3, -5, this.game));
-                    this.game.bubbles.push(new Bubble(this.x, this.y, this.radius/2, -3, -5, this.game));
-                }
-            }
-            draw(ctx) {
-                ctx.fillStyle = '#00ffff';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
+    draw() {
+        this.ctx.clearRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+        this.player.draw(this.renderer);
+        this.projectiles.forEach(p => p.draw(this.renderer));
+        this.entities.forEach(e => e.draw(this.renderer));
+        this.renderer.drawText(`Score: ${this.score}`, 20, 40, 24);
+    }
 
-        class Harpoon {
-            constructor(x, y, game) {
-                this.x = x; this.y = y; this.active = true; this.game = game;
-            }
-            update() {
-                this.y -= 10;
-                if(this.y < 0) this.active = false;
-            }
-            draw(ctx) {
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.game.height);
-                ctx.lineTo(this.x, this.y);
-                ctx.stroke();
-            }
-        }
+    gameLoop() {
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+}
 
-        // Initialize Engine
-        const game = new GameEngine();
-        game.requestLoop();
-    </script>
-</body>
-</html>
+// Harpoon Class
+class Harpoon {
+    constructor(x, y, game) {
+        this.x = x; this.y = y; this.active = true;
+    }
+    update() {
+        this.y -= CONFIG.HARPOON_SPEED;
+        if (this.y < 0) this.active = false;
+    }
+    draw(renderer) {
+        renderer.drawRect(this.x - 2, this.y, 4, 700 - this.y, CONFIG.COLORS.HARPOON);
+    }
+}
+
+// Initialization
+window.onload = () => new GameEngine();
