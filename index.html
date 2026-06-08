@@ -35,7 +35,6 @@
 <div id="wrap">
   <canvas id="game" width="900" height="600"></canvas>
 </div>
-<div id="hint">← → לתזוזה · רווח לירייה · P להשהיה</div>
 
 <script>
 (() => {
@@ -51,7 +50,8 @@
     if (e.code === 'KeyP') paused = !paused;
     if (e.code === 'Enter') {
       if (state === 'menu') startGame();
-      else if (state === 'gameover' || state === 'win') { resetAll(); state = 'menu'; }
+      else if (state === 'gameover') startGame();
+      else if (state === 'win') { resetAll(); state = 'menu'; }
       else if (state === 'levelclear') nextLevel();
     }
   });
@@ -598,7 +598,19 @@
     }
     if (lives <= 0) {
       state = 'gameover';
+    } else {
+      // Lost a life — restart the current level (keep score and remaining lives)
+      restartLevel();
     }
+  }
+
+  function restartLevel() {
+    slowTimer = 0; hasDouble = false; doubleTimer = 0;
+    hasTriple = false; tripleTimer = 0;
+    freezeTimer = 0; magnetTimer = 0;
+    multiplierTimer = 0; speedTimer = 0; pierceTimer = 0; stickyCharges = 0;
+    player.x = W/2; player.invuln = 1.5;
+    makeLevel(level);
   }
 
   function render() {
@@ -1001,12 +1013,7 @@
 
     ctx.fillStyle = '#fff';
     ctx.font = '20px Segoe UI';
-    ctx.fillText(`לחץ ENTER להתחלה`, W/2, H/2 + 40);
-    ctx.font = '15px Segoe UI';
-    ctx.fillStyle = '#aab';
-    ctx.fillText('חצים לתזוזה  ·  רווח לירייה  ·  P להשהיה', W/2, H/2 + 75);
-    ctx.fillText('פוצץ את כל הבועות בכל שלב כדי להתקדם', W/2, H/2 + 100);
-    ctx.fillText(`${MAX_LEVEL} שלבים · קוצים בתקרה · 14 פאוור-אפס`, W/2, H/2 + 125);
+    ctx.fillText(`לחץ ENTER להתחלה`, W/2, H/2 + 60);
   }
 
   function drawLevelClear() {
@@ -1041,7 +1048,7 @@
     ctx.fillText(`Final Score: ${score}`, W/2, H/2 + 30);
     ctx.font = '18px Segoe UI';
     ctx.fillStyle = '#ccc';
-    ctx.fillText(`לחץ ENTER לחזרה לתפריט`, W/2, H/2 + 70);
+    ctx.fillText(`לחץ ENTER להתחלה מחדש`, W/2, H/2 + 70);
   }
 
   function drawWin() {
