@@ -1,204 +1,860 @@
-/**
- * BUBBLE TROUBLE PRO - ENGINE CORE (ARCHITECTURE 1.0)
- * --------------------------------------------------
- * מנוע זה בנוי בגישת OOP (Object Oriented Programming).
- * הוא כולל מנהל מצבים, מערכת אירועים, וניהול זיכרון אופטימלי.
- */
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bubble Trouble Deluxe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a1f;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  #wrap {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    display: block;
+    background: #000;
+    box-shadow: 0 0 60px rgba(100,180,255,0.4);
+    border-radius: 8px;
+    max-width: 100%; max-height: 100%;
+  }
+  #hint {
+    position: fixed; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: #88a; opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="900" height="600"></canvas>
+</div>
+<div id="hint">← → לתזוזה · רווח לירייה · P להשהיה</div>
 
-// 1. הגדרות מערכת (Configuration)
-const CONFIG = {
-    CANVAS_WIDTH: 1000,
-    CANVAS_HEIGHT: 700,
-    GRAVITY: 0.25,
-    PLAYER_SPEED: 8,
-    HARPOON_SPEED: 12,
-    MAX_PROJECTILES: 2,
-    COLORS: {
-        PLAYER: '#FFD700',
-        BUBBLE: '#00D4FF',
-        HARPOON: '#FFFFFF',
-        UI: '#FFFFFF'
-    }
-};
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
 
-// 2. מנהל המצבים (State Manager)
-class GameStateManager {
-    constructor() {
-        this.states = {
-            MENU: 'MENU',
-            PLAYING: 'PLAYING',
-            GAMEOVER: 'GAMEOVER'
-        };
-        this.current = this.states.PLAYING;
+  // -------- Input --------
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['ArrowLeft','ArrowRight','Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+    if (e.code === 'KeyP') paused = !paused;
+    if (e.code === 'Enter') {
+      if (state === 'menu') startGame();
+      else if (state === 'gameover' || state === 'win') { resetAll(); state = 'menu'; }
+      else if (state === 'levelclear') nextLevel();
     }
-    setState(newState) { this.current = newState; }
-}
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// 3. מנוע הגרפיקה (Renderer)
-class Renderer {
-    constructor(ctx) { this.ctx = ctx; }
-    drawRect(x, y, w, h, color) {
-        this.ctx.fillStyle = color;
-        this.ctx.fillRect(x, y, w, h);
-    }
-    drawCircle(x, y, r, color) {
-        this.ctx.fillStyle = color;
-        this.ctx.beginPath();
-        this.ctx.arc(x, y, r, 0, Math.PI * 2);
-        this.ctx.fill();
-    }
-    drawText(text, x, y, size) {
-        this.ctx.fillStyle = CONFIG.COLORS.UI;
-        this.ctx.font = `${size}px Arial`;
-        this.ctx.fillText(text, x, y);
-    }
-}
+  // -------- Game state --------
+  let state = 'menu';
+  let paused = false;
+  let level = 1;
+  let score = 0;
+  let lives = 3;
+  let levelTimer = 0;
+  let maxLevelTime = 60;
+  let levelClearTimer = 0;
+  let shakeAmt = 0;
 
-// 4. ישויות (Entities)
-class Entity {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
+  const MAX_LEVEL = 10;
+
+  const player = {
+    x: W/2, y: H - 40,
+    w: 38, h: 50,
+    speed: 320,
+    cooldown: 0,
+    invuln: 0,
+    walkPhase: 0,
+  };
+
+  let bubbles = [];
+  let harpoons = [];
+  let particles = [];
+  let powerups = [];
+  let stars = [];
+  let clouds = [];
+
+  function initBackground() {
+    stars = [];
+    for (let i = 0; i < 60; i++) {
+      stars.push({
+        x: Math.random()*W,
+        y: Math.random()*H*0.7,
+        r: Math.random()*1.5 + 0.3,
+        tw: Math.random()*Math.PI*2,
+        speed: Math.random()*0.5 + 0.2
+      });
     }
-}
+    clouds = [];
+    for (let i = 0; i < 4; i++) {
+      clouds.push({
+        x: Math.random()*W,
+        y: 50 + Math.random()*150,
+        w: 100 + Math.random()*120,
+        speed: 8 + Math.random()*12,
+        alpha: 0.08 + Math.random()*0.1
+      });
+    }
+  }
+  initBackground();
 
-class Player extends Entity {
-    constructor(game) {
-        super(500, 640);
-        this.game = game;
-        this.width = 60;
-        this.height = 60;
+  const LEVEL_COLORS = [
+    ['#ff5577','#ff99aa'],
+    ['#55aaff','#99ccff'],
+    ['#ffcc44','#ffe699'],
+    ['#66ee99','#aaffcc'],
+    ['#cc77ff','#e0aaff'],
+    ['#ff8844','#ffbb88'],
+    ['#44ddee','#99eeff'],
+    ['#ee44cc','#ff99dd'],
+    ['#ffee55','#fff7aa'],
+    ['#ff3322','#ff8866']
+  ];
+
+  function makeLevel(n) {
+    bubbles = [];
+    harpoons = [];
+    particles = [];
+    powerups = [];
+    const palette = LEVEL_COLORS[(n-1) % LEVEL_COLORS.length];
+    levelTimer = 0;
+    maxLevelTime = 50 + n * 8;
+
+    if (n === 1) {
+      spawnBubble(W*0.3, 150, 3, 80, palette);
+    } else if (n === 2) {
+      spawnBubble(W*0.25, 150, 3, 100, palette);
+      spawnBubble(W*0.75, 200, 2, -90, palette);
+    } else if (n === 3) {
+      spawnBubble(W*0.2, 150, 4, 70, palette);
+    } else if (n === 4) {
+      spawnBubble(W*0.3, 150, 3, 110, palette);
+      spawnBubble(W*0.7, 250, 3, -110, palette);
+    } else if (n === 5) {
+      for (let i = 0; i < 4; i++) spawnBubble(150 + i*180, 100 + (i%2)*100, 2, i%2?120:-120, palette);
+    } else if (n === 6) {
+      spawnBubble(W*0.5, 150, 4, 90, palette);
+      spawnBubble(W*0.2, 250, 2, -130, palette);
+    } else if (n === 7) {
+      spawnBubble(W*0.3, 150, 4, 100, palette);
+      spawnBubble(W*0.7, 200, 3, -120, palette);
+    } else if (n === 8) {
+      for (let i = 0; i < 3; i++) spawnBubble(200 + i*250, 150, 3, i%2?130:-130, palette);
+    } else if (n === 9) {
+      spawnBubble(W*0.5, 100, 4, 140, palette);
+      spawnBubble(W*0.2, 300, 2, -160, palette);
+      spawnBubble(W*0.8, 300, 2, 160, palette);
+    } else if (n === 10) {
+      spawnBubble(W*0.25, 100, 4, 130, palette);
+      spawnBubble(W*0.75, 100, 4, -130, palette);
+    }
+  }
+
+  function bubbleRadius(size) {
+    return [0, 16, 28, 44, 64][size];
+  }
+
+  function bubbleScore(size) {
+    return [0, 50, 30, 20, 10][size];
+  }
+
+  function spawnBubble(x, y, size, vx, palette) {
+    bubbles.push({
+      x, y,
+      r: bubbleRadius(size),
+      vx: vx,
+      vy: 0,
+      size,
+      color1: palette[0],
+      color2: palette[1],
+      wobble: Math.random()*Math.PI*2,
+      rot: 0
+    });
+  }
+
+  function splitBubble(b) {
+    score += bubbleScore(b.size);
+    for (let i = 0; i < 18; i++) {
+      const ang = Math.random()*Math.PI*2;
+      const sp = 60 + Math.random()*180;
+      particles.push({
+        x: b.x, y: b.y,
+        vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp,
+        life: 0.6 + Math.random()*0.4,
+        max: 1, r: 2 + Math.random()*4,
+        color: b.color2
+      });
+    }
+    if (Math.random() < 0.12) {
+      const types = ['life','slow','double'];
+      powerups.push({
+        x: b.x, y: b.y, vy: 60,
+        type: types[Math.floor(Math.random()*types.length)],
+        bob: 0
+      });
+    }
+    if (b.size > 1) {
+      const ns = b.size - 1;
+      const pal = [b.color1, b.color2];
+      const bounceUp = -260;
+      bubbles.push({
+        x: b.x, y: b.y, r: bubbleRadius(ns),
+        vx: -Math.abs(b.vx || 100) * 0.9 - 30,
+        vy: bounceUp,
+        size: ns, color1: pal[0], color2: pal[1],
+        wobble: Math.random()*Math.PI*2, rot: 0
+      });
+      bubbles.push({
+        x: b.x, y: b.y, r: bubbleRadius(ns),
+        vx: Math.abs(b.vx || 100) * 0.9 + 30,
+        vy: bounceUp,
+        size: ns, color1: pal[0], color2: pal[1],
+        wobble: Math.random()*Math.PI*2, rot: 0
+      });
+    }
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    if (!paused && (state === 'playing' || state === 'levelclear')) update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    for (const s of stars) {
+      s.tw += dt * 3;
+      s.x -= s.speed * dt * 4;
+      if (s.x < 0) s.x = W;
+    }
+    for (const c of clouds) {
+      c.x -= c.speed * dt;
+      if (c.x < -c.w) c.x = W + c.w;
     }
 
-    update() {
-        if (this.game.input.isDown('ArrowLeft') && this.x > 0) this.x -= CONFIG.PLAYER_SPEED;
-        if (this.game.input.isDown('ArrowRight') && this.x < CONFIG.CANVAS_WIDTH - this.width) this.x += CONFIG.PLAYER_SPEED;
+    if (state === 'levelclear') {
+      levelClearTimer -= dt;
+      updateParticles(dt);
+      return;
     }
 
-    draw(renderer) {
-        renderer.drawRect(this.x, this.y, this.width, this.height, CONFIG.COLORS.PLAYER);
-    }
-}
-
-class Bubble extends Entity {
-    constructor(x, y, radius, dx, dy, game) {
-        super(x, y);
-        this.radius = radius;
-        this.dx = dx;
-        this.dy = dy;
-        this.game = game;
+    levelTimer += dt;
+    if (levelTimer > maxLevelTime) {
+      damagePlayer();
+      levelTimer = 0;
     }
 
-    update() {
-        this.x += this.dx;
-        this.dy += CONFIG.GRAVITY;
-        this.y += this.dy;
+    if (player.invuln > 0) player.invuln -= dt;
+    let move = 0;
+    if (keys['ArrowLeft']) move -= 1;
+    if (keys['ArrowRight']) move += 1;
+    player.x += move * player.speed * dt;
+    player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+    if (move !== 0) player.walkPhase += dt * 10;
 
-        if (this.x + this.radius > CONFIG.CANVAS_WIDTH || this.x - this.radius < 0) this.dx *= -1;
-        if (this.y + this.radius > CONFIG.CANVAS_HEIGHT) {
-            this.y = CONFIG.CANVAS_HEIGHT - this.radius;
-            this.dy = -10;
+    player.cooldown -= dt;
+    const maxHarpoons = hasDouble ? 2 : 1;
+    if (keys['Space'] && player.cooldown <= 0 && harpoons.length < maxHarpoons) {
+      harpoons.push({
+        x: player.x,
+        topY: player.y - 10,
+        speed: 700
+      });
+      player.cooldown = 0.15;
+    }
+
+    for (const h of harpoons) {
+      h.topY -= h.speed * dt;
+    }
+    harpoons = harpoons.filter(h => h.topY > 10);
+
+    const gravity = 380;
+    const slowFactor = slowTimer > 0 ? 0.5 : 1;
+    if (slowTimer > 0) slowTimer -= dt;
+    if (doubleTimer > 0) {
+      doubleTimer -= dt;
+      if (doubleTimer <= 0) hasDouble = false;
+    }
+    for (const b of bubbles) {
+      b.wobble += dt * 3;
+      b.x += b.vx * dt * slowFactor;
+      b.y += b.vy * dt * slowFactor;
+      b.vy += gravity * dt * slowFactor;
+      if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx); }
+      if (b.x + b.r > W) { b.x = W - b.r; b.vx = -Math.abs(b.vx); }
+      if (b.y + b.r > H - 20) {
+        b.y = H - 20 - b.r;
+        const bh = [0, 320, 380, 440, 500][b.size];
+        b.vy = -bh;
+      }
+      if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy); }
+    }
+
+    for (let i = harpoons.length - 1; i >= 0; i--) {
+      const h = harpoons[i];
+      for (let j = bubbles.length - 1; j >= 0; j--) {
+        const b = bubbles[j];
+        const lineX = h.x;
+        const dx = Math.abs(b.x - lineX);
+        if (dx < b.r) {
+          const lineTop = h.topY;
+          const lineBot = player.y - 10;
+          if (b.y + b.r >= lineTop && b.y - b.r <= lineBot) {
+            bubbles.splice(j, 1);
+            splitBubble(b);
+            harpoons.splice(i, 1);
+            shakeAmt = 8;
+            break;
+          }
         }
+      }
     }
 
-    draw(renderer) {
-        renderer.drawCircle(this.x, this.y, this.radius, CONFIG.COLORS.BUBBLE);
-    }
-
-    split() {
-        if (this.radius > 10) {
-            this.game.entities.push(new Bubble(this.x, this.y, this.radius / 1.5, 3, -5, this.game));
-            this.game.entities.push(new Bubble(this.x, this.y, this.radius / 1.5, -3, -5, this.game));
+    if (player.invuln <= 0) {
+      for (const b of bubbles) {
+        const dx = b.x - player.x;
+        const dy = b.y - (player.y + player.h/4);
+        if (dx*dx + dy*dy < (b.r + 14)*(b.r + 14)) {
+          damagePlayer();
+          break;
         }
-    }
-}
-
-// 5. מנוע המשחק הראשי (Main Game Loop)
-class GameEngine {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.renderer = new Renderer(this.ctx);
-        this.state = new GameStateManager();
-        
-        this.input = {
-            keys: {},
-            isDown: (key) => this.input.keys[key],
-            init: () => {
-                window.addEventListener('keydown', e => this.input.keys[e.code] = true);
-                window.addEventListener('keyup', e => this.input.keys[e.code] = false);
-            }
-        };
-        this.input.init();
-
-        this.player = new Player(this);
-        this.entities = [new Bubble(200, 100, 40, 2, 0, this), new Bubble(700, 100, 40, -2, 0, this)];
-        this.projectiles = [];
-        
-        this.score = 0;
-        this.gameLoop();
+      }
     }
 
-    handleShooting() {
-        if (this.input.isDown('Space') && this.projectiles.length < CONFIG.MAX_PROJECTILES) {
-            this.projectiles.push(new Harpoon(this.player.x + 30, this.player.y, this));
-        }
+    for (let i = powerups.length - 1; i >= 0; i--) {
+      const p = powerups[i];
+      p.y += p.vy * dt;
+      p.bob += dt * 4;
+      if (p.y > H - 30) { powerups.splice(i,1); continue; }
+      const dx = p.x - player.x;
+      const dy = p.y - player.y;
+      if (dx*dx + dy*dy < 30*30) {
+        applyPowerup(p.type);
+        powerups.splice(i,1);
+      }
     }
 
-    update() {
-        this.handleShooting();
-        this.player.update();
-        this.projectiles.forEach(p => p.update());
-        this.entities.forEach(e => e.update());
-        
-        // ניהול התנגשויות (Collision Management)
-        this.checkCollisions();
-        
-        // ניקוי זיכרון
-        this.projectiles = this.projectiles.filter(p => p.active);
+    updateParticles(dt);
+
+    if (shakeAmt > 0) shakeAmt = Math.max(0, shakeAmt - dt * 30);
+
+    if (bubbles.length === 0) {
+      state = 'levelclear';
+      levelClearTimer = 2.2;
+      score += Math.floor((maxLevelTime - levelTimer) * 10);
+      score += lives * 50;
+    }
+  }
+
+  let slowTimer = 0;
+  let hasDouble = false;
+  let doubleTimer = 0;
+
+  function applyPowerup(type) {
+    if (type === 'life') lives = Math.min(lives + 1, 5);
+    if (type === 'slow') slowTimer = 6;
+    if (type === 'double') { hasDouble = true; doubleTimer = 8; }
+    for (let i = 0; i < 20; i++) {
+      const ang = Math.random()*Math.PI*2;
+      particles.push({
+        x: player.x, y: player.y,
+        vx: Math.cos(ang)*120, vy: Math.sin(ang)*120 - 80,
+        life: 0.8, max: 0.8, r: 3, color: '#ffe066'
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (const p of particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 320 * dt;
+      p.life -= dt;
+    }
+    particles = particles.filter(p => p.life > 0);
+  }
+
+  function damagePlayer() {
+    if (player.invuln > 0) return;
+    lives--;
+    player.invuln = 2;
+    shakeAmt = 20;
+    for (let i = 0; i < 30; i++) {
+      const ang = Math.random()*Math.PI*2;
+      particles.push({
+        x: player.x, y: player.y,
+        vx: Math.cos(ang)*200, vy: Math.sin(ang)*200,
+        life: 0.7, max: 0.7, r: 3, color: '#ff4466'
+      });
+    }
+    if (lives <= 0) {
+      state = 'gameover';
+    }
+  }
+
+  function render() {
+    ctx.save();
+    if (shakeAmt > 0) {
+      ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+    }
+    drawBackground();
+
+    if (state === 'menu') {
+      drawMenu();
+    } else {
+      drawFloor();
+      drawBubbles();
+      drawPowerups();
+      drawPlayer();
+      drawHarpoons();
+      drawParticles();
+      drawHUD();
+      if (state === 'levelclear') drawLevelClear();
+      if (state === 'gameover') drawGameOver();
+      if (state === 'win') drawWin();
+      if (paused) drawPaused();
+    }
+    ctx.restore();
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    const hue = (level * 30) % 360;
+    g.addColorStop(0, `hsl(${hue}, 60%, 12%)`);
+    g.addColorStop(0.5, `hsl(${(hue+40)%360}, 50%, 20%)`);
+    g.addColorStop(1, `hsl(${(hue+80)%360}, 40%, 10%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const s of stars) {
+      const a = 0.4 + Math.sin(s.tw)*0.3;
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
     }
 
-    checkCollisions() {
-        this.projectiles.forEach(p => {
-            this.entities.forEach((e, index) => {
-                if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius) {
-                    p.active = false;
-                    e.split();
-                    this.entities.splice(index, 1);
-                    this.score += 100;
-                }
-            });
-        });
+    ctx.fillStyle = `hsla(${(hue+200)%360}, 30%, 8%, 0.7)`;
+    ctx.beginPath();
+    ctx.moveTo(0, H - 80);
+    for (let x = 0; x <= W; x += 40) {
+      const y = H - 80 - Math.sin(x*0.012 + level)*30 - Math.sin(x*0.03)*15;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+    ctx.fill();
+
+    for (const c of clouds) {
+      ctx.fillStyle = `rgba(255,255,255,${c.alpha})`;
+      drawCloud(c.x, c.y, c.w);
+    }
+  }
+
+  function drawCloud(x, y, w) {
+    ctx.beginPath();
+    ctx.arc(x, y, w*0.25, 0, Math.PI*2);
+    ctx.arc(x + w*0.25, y - w*0.08, w*0.22, 0, Math.PI*2);
+    ctx.arc(x + w*0.5, y, w*0.26, 0, Math.PI*2);
+    ctx.arc(x + w*0.7, y + w*0.05, w*0.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawFloor() {
+    const g = ctx.createLinearGradient(0, H-20, 0, H);
+    g.addColorStop(0, '#444');
+    g.addColorStop(1, '#111');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, H-20, W, 20);
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H-20); ctx.lineTo(W, H-20);
+    ctx.stroke();
+  }
+
+  function drawBubbles() {
+    for (const b of bubbles) {
+      const wobR = b.r + Math.sin(b.wobble)*1.5;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(b.x + 4, b.y + 6, wobR*0.9, wobR*0.4, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      const g = ctx.createRadialGradient(b.x - wobR*0.35, b.y - wobR*0.4, wobR*0.1, b.x, b.y, wobR);
+      g.addColorStop(0, b.color2);
+      g.addColorStop(0.4, b.color1);
+      g.addColorStop(1, shade(b.color1, -40));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, wobR, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle = shade(b.color1, -50);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(b.x - wobR*0.35, b.y - wobR*0.4, wobR*0.25, wobR*0.18, -0.6, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.arc(b.x - wobR*0.15, b.y - wobR*0.55, wobR*0.06, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawHarpoons() {
+    for (const h of harpoons) {
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(h.x, player.y - 10);
+      ctx.lineTo(h.x, h.topY);
+      ctx.stroke();
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      for (let y = h.topY; y < player.y - 10; y += 8) {
+        ctx.beginPath();
+        ctx.moveTo(h.x - 3, y);
+        ctx.lineTo(h.x + 3, y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffeb6b';
+      ctx.beginPath();
+      ctx.moveTo(h.x, h.topY - 8);
+      ctx.lineTo(h.x - 5, h.topY + 2);
+      ctx.lineTo(h.x + 5, h.topY + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#aa8800';
+      ctx.stroke();
+    }
+  }
+
+  function drawPlayer() {
+    const p = player;
+    const blink = p.invuln > 0 && Math.floor(p.invuln * 10) % 2 === 0;
+    if (blink) { ctx.save(); ctx.globalAlpha = 0.4; }
+
+    const bob = Math.sin(p.walkPhase)*2;
+    const cx = p.x, cy = p.y;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(cx, H - 22, 22, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#2a3a5a';
+    ctx.fillRect(cx - 10, cy + 10 + bob, 7, 14 - bob);
+    ctx.fillRect(cx + 3, cy + 10 - bob, 7, 14 + bob);
+
+    const bodyG = ctx.createLinearGradient(cx - 18, cy - 10, cx + 18, cy + 15);
+    bodyG.addColorStop(0, '#4a7bd6');
+    bodyG.addColorStop(1, '#2848a0');
+    ctx.fillStyle = bodyG;
+    roundRect(cx - 16, cy - 8, 32, 22, 6);
+    ctx.fill();
+
+    ctx.fillStyle = '#222';
+    ctx.fillRect(cx - 16, cy + 10, 32, 4);
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(cx - 4, cy + 10, 8, 4);
+
+    ctx.fillStyle = '#3858b8';
+    ctx.fillRect(cx - 18, cy - 4, 6, 14);
+    ctx.fillRect(cx + 12, cy - 4, 6, 14);
+
+    const headG = ctx.createRadialGradient(cx - 3, cy - 18, 2, cx, cy - 15, 12);
+    headG.addColorStop(0, '#ffe0c2');
+    headG.addColorStop(1, '#d9a679');
+    ctx.fillStyle = headG;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 15, 10, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#3a2818';
+    ctx.beginPath();
+    ctx.arc(cx, cy - 19, 10, Math.PI*1.1, Math.PI*1.9);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.fillRect(cx - 4, cy - 15, 2, 2);
+    ctx.fillRect(cx + 2, cy - 15, 2, 2);
+
+    ctx.fillStyle = '#666';
+    ctx.fillRect(cx - 8, cy - 12, 16, 5);
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(cx - 2, cy - 15, 4, 6);
+
+    if (blink) ctx.restore();
+  }
+
+  function drawPowerups() {
+    for (const p of powerups) {
+      const y = p.y + Math.sin(p.bob)*3;
+      const g = ctx.createRadialGradient(p.x, y, 0, p.x, y, 25);
+      g.addColorStop(0, 'rgba(255,255,200,0.6)');
+      g.addColorStop(1, 'rgba(255,255,200,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(p.x - 25, y - 25, 50, 50);
+      let col = '#ffcc44', sym = '?';
+      if (p.type === 'life') { col = '#ff4466'; sym = '♥'; }
+      if (p.type === 'slow') { col = '#44aaff'; sym = '⧗'; }
+      if (p.type === 'double') { col = '#aa66ff'; sym = '⇈'; }
+      ctx.fillStyle = col;
+      roundRect(p.x - 12, y - 12, 24, 24, 5);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(sym, p.x, y + 1);
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const a = Math.max(0, p.life / p.max);
+      ctx.fillStyle = withAlpha(p.color, a);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * a, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawHUD() {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, W, 40);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`SCORE  ${score}`, 16, 20);
+
+    ctx.textAlign = 'center';
+    ctx.fillText(`LEVEL ${level} / ${MAX_LEVEL}`, W/2, 20);
+
+    ctx.textAlign = 'right';
+    ctx.fillText('LIVES', W - 100, 20);
+    for (let i = 0; i < lives; i++) {
+      drawHeart(W - 80 + i * 22, 20, 8);
     }
 
-    draw() {
-        this.ctx.clearRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
-        this.player.draw(this.renderer);
-        this.projectiles.forEach(p => p.draw(this.renderer));
-        this.entities.forEach(e => e.draw(this.renderer));
-        this.renderer.drawText(`Score: ${this.score}`, 20, 40, 24);
-    }
+    const tFrac = 1 - levelTimer / maxLevelTime;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(10, 44, W - 20, 6);
+    const tColor = tFrac > 0.4 ? '#5ec96b' : (tFrac > 0.2 ? '#e8c44a' : '#e85a3a');
+    ctx.fillStyle = tColor;
+    ctx.fillRect(10, 44, (W - 20) * Math.max(0, tFrac), 6);
 
-    gameLoop() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.gameLoop());
+    let py = 60;
+    if (slowTimer > 0) {
+      ctx.fillStyle = '#44aaff';
+      ctx.textAlign = 'left';
+      ctx.font = '14px Segoe UI';
+      ctx.fillText(`⧗ Slow ${slowTimer.toFixed(1)}s`, 12, py); py += 18;
     }
-}
+    if (doubleTimer > 0) {
+      ctx.fillStyle = '#aa66ff';
+      ctx.textAlign = 'left';
+      ctx.font = '14px Segoe UI';
+      ctx.fillText(`⇈ Double ${doubleTimer.toFixed(1)}s`, 12, py);
+    }
+  }
 
-// Harpoon Class
-class Harpoon {
-    constructor(x, y, game) {
-        this.x = x; this.y = y; this.active = true;
-    }
-    update() {
-        this.y -= CONFIG.HARPOON_SPEED;
-        if (this.y < 0) this.active = false;
-    }
-    draw(renderer) {
-        renderer.drawRect(this.x - 2, this.y, 4, 700 - this.y, CONFIG.COLORS.HARPOON);
-    }
-}
+  function drawHeart(x, y, r) {
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath();
+    ctx.moveTo(x, y + r*0.6);
+    ctx.bezierCurveTo(x, y, x - r, y, x - r, y - r*0.3);
+    ctx.bezierCurveTo(x - r, y - r, x, y - r, x, y - r*0.3);
+    ctx.bezierCurveTo(x, y - r, x + r, y - r, x + r, y - r*0.3);
+    ctx.bezierCurveTo(x + r, y, x, y, x, y + r*0.6);
+    ctx.fill();
+  }
 
-// Initialization
-window.onload = () => new GameEngine();
+  function drawMenu() {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const t = performance.now() / 1000;
+    const bx = W/2 - 180, by = H/2 - 60 + Math.sin(t*2)*8;
+    const br = 60;
+    const g = ctx.createRadialGradient(bx - 20, by - 25, 5, bx, by, br);
+    g.addColorStop(0, '#ff99aa');
+    g.addColorStop(0.4, '#ff5577');
+    g.addColorStop(1, '#992244');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(bx, by, br, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.ellipse(bx - 20, by - 25, 15, 10, -0.5, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 56px Segoe UI';
+    ctx.fillText('BUBBLE TROUBLE', W/2 + 30, H/2 - 80);
+    ctx.font = '24px Segoe UI';
+    ctx.fillStyle = '#ffcc66';
+    ctx.fillText('DELUXE', W/2 + 30, H/2 - 40);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px Segoe UI';
+    ctx.fillText(`לחץ ENTER להתחלה`, W/2, H/2 + 40);
+    ctx.font = '15px Segoe UI';
+    ctx.fillStyle = '#aab';
+    ctx.fillText('חצים לתזוזה  ·  רווח לירייה  ·  P להשהיה', W/2, H/2 + 75);
+    ctx.fillText('פוצץ את כל הבועות בכל שלב כדי להתקדם', W/2, H/2 + 100);
+    ctx.fillText(`${MAX_LEVEL} שלבים · 3 חיים · בונוס זמן`, W/2, H/2 + 125);
+  }
+
+  function drawLevelClear() {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#7dffa9';
+    ctx.font = 'bold 56px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Level ${level} Clear!`, W/2, H/2 - 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = '22px Segoe UI';
+    ctx.fillText(`Score: ${score}`, W/2, H/2 + 30);
+    if (level < MAX_LEVEL) {
+      ctx.font = '18px Segoe UI';
+      ctx.fillStyle = '#ccc';
+      ctx.fillText(`לחץ ENTER לשלב הבא`, W/2, H/2 + 70);
+    }
+    if (levelClearTimer <= 0 && level >= MAX_LEVEL) {
+      state = 'win';
+    }
+  }
+
+  function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ff5577';
+    ctx.font = 'bold 64px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', W/2, H/2 - 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px Segoe UI';
+    ctx.fillText(`Final Score: ${score}`, W/2, H/2 + 30);
+    ctx.font = '18px Segoe UI';
+    ctx.fillStyle = '#ccc';
+    ctx.fillText(`לחץ ENTER לחזרה לתפריט`, W/2, H/2 + 70);
+  }
+
+  function drawWin() {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffe066';
+    ctx.font = 'bold 64px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOU WON!', W/2, H/2 - 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px Segoe UI';
+    ctx.fillText(`Final Score: ${score}`, W/2, H/2 + 30);
+    ctx.font = '18px Segoe UI';
+    ctx.fillStyle = '#ccc';
+    ctx.fillText(`לחץ ENTER לחזרה לתפריט`, W/2, H/2 + 70);
+  }
+
+  function drawPaused() {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 56px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', W/2, H/2);
+    ctx.font = '20px Segoe UI';
+    ctx.fillText('לחץ P להמשיך', W/2, H/2 + 50);
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function shade(hex, percent) {
+    const c = hex.replace('#','');
+    const r = parseInt(c.substr(0,2), 16);
+    const g = parseInt(c.substr(2,2), 16);
+    const b = parseInt(c.substr(4,2), 16);
+    const f = percent < 0 ? 0 : 255;
+    const t = Math.abs(percent) / 100;
+    const nr = Math.round((f - r) * t + r);
+    const ng = Math.round((f - g) * t + g);
+    const nb = Math.round((f - b) * t + b);
+    return `rgb(${nr},${ng},${nb})`;
+  }
+
+  function withAlpha(color, a) {
+    if (color.startsWith('#')) {
+      const c = color.replace('#','');
+      const r = parseInt(c.substr(0,2), 16);
+      const g = parseInt(c.substr(2,2), 16);
+      const b = parseInt(c.substr(4,2), 16);
+      return `rgba(${r},${g},${b},${a})`;
+    }
+    return color;
+  }
+
+  function startGame() {
+    resetAll();
+    state = 'playing';
+    makeLevel(level);
+  }
+
+  function nextLevel() {
+    level++;
+    if (level > MAX_LEVEL) {
+      state = 'win';
+      return;
+    }
+    state = 'playing';
+    makeLevel(level);
+  }
+
+  function resetAll() {
+    level = 1; score = 0; lives = 3;
+    slowTimer = 0; hasDouble = false; doubleTimer = 0;
+    player.x = W/2; player.invuln = 0;
+    bubbles = []; harpoons = []; particles = []; powerups = [];
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
