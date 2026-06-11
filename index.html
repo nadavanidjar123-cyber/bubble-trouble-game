@@ -29,11 +29,138 @@
     position: fixed; bottom: 6px; left: 50%; transform: translateX(-50%);
     font-size: 12px; color: #88a; opacity: 0.7;
   }
+  #adminPanel {
+    position: fixed;
+    top: 50%; right: 20px;
+    transform: translateY(-50%);
+    width: 240px;
+    background: linear-gradient(180deg, #1a1a2e 0%, #14142a 100%);
+    border: 1px solid #5a5a8a;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 0 30px rgba(120, 100, 255, 0.4);
+    color: #eee;
+    font-size: 13px;
+    display: none;
+    direction: ltr;
+    text-align: left;
+    z-index: 1000;
+  }
+  #adminPanel.visible { display: block; }
+  #adminPanel h3 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    color: #ffd166;
+    text-align: center;
+    border-bottom: 1px solid #444;
+    padding-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  #adminPanel .row {
+    margin: 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #adminPanel label {
+    flex: 1;
+    color: #bbb;
+  }
+  #adminPanel button {
+    background: #3a3a6a;
+    color: #fff;
+    border: 1px solid #5a5a8a;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  #adminPanel button:hover { background: #4a4a8a; }
+  #adminPanel button.full {
+    width: 100%;
+    margin-top: 4px;
+  }
+  #adminPanel input, #adminPanel select {
+    background: #14142a;
+    color: #fff;
+    border: 1px solid #4a4a7a;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 12px;
+    width: 70px;
+  }
+  #adminPanel select { width: 100%; }
+  #adminPanel .status {
+    margin-top: 10px;
+    padding: 6px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 5px;
+    font-size: 11px;
+    color: #99dd99;
+    text-align: center;
+  }
+  #adminPanel .close {
+    position: absolute;
+    top: 6px; right: 8px;
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 20px; height: 20px;
+  }
+  #adminPanel .close:hover { color: #fff; }
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="game" width="900" height="600"></canvas>
+</div>
+
+<div id="adminPanel">
+  <button class="close" id="adm_close">×</button>
+  <h3>ADMIN PANEL</h3>
+
+  <div class="row">
+    <label>God Mode</label>
+    <button id="adm_god">OFF</button>
+  </div>
+
+  <div class="row">
+    <label>Jump to Level</label>
+    <input id="adm_levelInput" type="number" min="1" max="60" value="1">
+    <button id="adm_jump">GO</button>
+  </div>
+
+  <button class="full" id="adm_skip">Skip Current Level</button>
+  <button class="full" id="adm_life">+1 Life</button>
+  <button class="full" id="adm_clear">Clear All Bubbles</button>
+
+  <div class="row" style="margin-top:10px">
+    <select id="adm_pu">
+      <option value="life">Life ♥</option>
+      <option value="slow">Slow ⧗</option>
+      <option value="double">Double ⇈</option>
+      <option value="triple">Triple ⫶</option>
+      <option value="freeze">Freeze ❄</option>
+      <option value="shield">Shield ⛨</option>
+      <option value="bomb">Bomb ✸</option>
+      <option value="magnet">Magnet U</option>
+      <option value="multi">2x Score ★</option>
+      <option value="speed">Speed ⚡</option>
+      <option value="pierce">Pierce ✕</option>
+      <option value="time">Time ⌚</option>
+      <option value="mega">MEGA ☠</option>
+      <option value="sticky">Sticky ⚓</option>
+    </select>
+  </div>
+  <button class="full" id="adm_givePu">Give Powerup</button>
+
+  <button class="full" id="adm_reset" style="background:#7a3a3a;border-color:#aa5a5a;margin-top:10px">Reset Game</button>
+
+  <div class="status" id="adm_status">Hint: type nnkk to toggle</div>
 </div>
 
 <script>
@@ -44,6 +171,7 @@
 
   // -------- Input --------
   const keys = {};
+  let keySequence = '';
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
     if (['ArrowLeft','ArrowRight','Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
@@ -54,8 +182,74 @@
       else if (state === 'win') { resetAll(); state = 'menu'; }
       else if (state === 'levelclear') nextLevel();
     }
+    // Admin code: n,n,k,k
+    if (e.key && e.key.length === 1) {
+      keySequence = (keySequence + e.key.toLowerCase()).slice(-4);
+      if (keySequence === 'nnkk') {
+        toggleAdminPanel();
+        keySequence = '';
+      }
+    }
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // -------- Admin Panel --------
+  let godMode = false;
+  const adminPanel = document.getElementById('adminPanel');
+  function toggleAdminPanel() {
+    adminPanel.classList.toggle('visible');
+    setAdmStatus(adminPanel.classList.contains('visible') ? 'Admin panel opened' : '');
+  }
+  function setAdmStatus(msg) {
+    const el = document.getElementById('adm_status');
+    el.textContent = msg || 'Hint: type nnkk to toggle';
+    if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = 'Hint: type nnkk to toggle'; }, 2000);
+  }
+  document.getElementById('adm_close').onclick = toggleAdminPanel;
+  document.getElementById('adm_god').onclick = (e) => {
+    godMode = !godMode;
+    e.target.textContent = godMode ? 'ON' : 'OFF';
+    e.target.style.background = godMode ? '#3a7a3a' : '#3a3a6a';
+    setAdmStatus('God Mode ' + (godMode ? 'enabled' : 'disabled'));
+  };
+  document.getElementById('adm_jump').onclick = () => {
+    const v = parseInt(document.getElementById('adm_levelInput').value, 10);
+    if (isNaN(v) || v < 1 || v > MAX_LEVEL) { setAdmStatus('Invalid level'); return; }
+    level = v;
+    state = 'playing';
+    paused = false;
+    makeLevel(level);
+    player.x = W/2;
+    player.invuln = 1;
+    setAdmStatus('Jumped to level ' + v);
+  };
+  document.getElementById('adm_skip').onclick = () => {
+    if (state !== 'playing') { setAdmStatus('Not in game'); return; }
+    bubbles = [];
+    setAdmStatus('Level cleared');
+  };
+  document.getElementById('adm_life').onclick = () => {
+    lives = Math.min(lives + 1, 8);
+    setAdmStatus('Lives: ' + lives);
+  };
+  document.getElementById('adm_clear').onclick = () => {
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i];
+      bubbles.splice(i, 1);
+      splitBubble(b, true);
+    }
+    setAdmStatus('All bubbles cleared');
+  };
+  document.getElementById('adm_givePu').onclick = () => {
+    const type = document.getElementById('adm_pu').value;
+    applyPowerup(type);
+    setAdmStatus('Gave: ' + type);
+  };
+  document.getElementById('adm_reset').onclick = () => {
+    resetAll();
+    state = 'menu';
+    setAdmStatus('Game reset');
+  };
 
   // -------- Game state --------
   let state = 'menu';
@@ -76,7 +270,7 @@
   const player = {
     x: W/2, y: H - 40,
     w: 38, h: 50,
-    speed: 200,
+    speed: 220,
     cooldown: 0,
     invuln: 0,
     walkPhase: 0,
@@ -359,7 +553,7 @@
       harpoons.push({
         x: player.x,
         topY: player.y - 10,
-        speed: 420,
+        speed: 462,
         sticky: isSticky,
         stuck: false,
         stuckTimer: 0
@@ -573,6 +767,7 @@
   }
 
   function damagePlayer() {
+    if (godMode) return;
     if (player.invuln > 0) return;
     if (shieldCharges > 0) {
       shieldCharges--;
@@ -1011,10 +1206,7 @@
 
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 56px Segoe UI';
-    ctx.fillText('BUBBLE TROUBLE', W/2 + 30, H/2 - 80);
-    ctx.font = '24px Segoe UI';
-    ctx.fillStyle = '#ffcc66';
-    ctx.fillText('DELUXE', W/2 + 30, H/2 - 40);
+    ctx.fillText('BUBBLE TROUBLE', W/2 + 30, H/2 - 60);
 
     ctx.fillStyle = '#fff';
     ctx.font = '20px Segoe UI';
