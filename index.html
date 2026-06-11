@@ -62,7 +62,7 @@
   let paused = false;
   let level = 1;
   let score = 0;
-  let lives = 3;
+  let lives = 5;
   let levelTimer = 0;
   let maxLevelTime = 60;
   let levelClearTimer = 0;
@@ -76,7 +76,7 @@
   const player = {
     x: W/2, y: H - 40,
     w: 38, h: 50,
-    speed: 320,
+    speed: 200,
     cooldown: 0,
     invuln: 0,
     walkPhase: 0,
@@ -128,16 +128,16 @@
 
   // Hand-designed first 10 levels, then procedural with ramping difficulty
   const LEVEL_DESIGNS = {
-    1:  [[0.30, 150, 3,  80]],
-    2:  [[0.25, 150, 3, 100], [0.75, 200, 2, -90]],
-    3:  [[0.20, 150, 4,  70]],
-    4:  [[0.30, 150, 3, 110], [0.70, 250, 3, -110]],
-    5:  [[0.15,100,2,120],[0.35,200,2,-120],[0.55,100,2,120],[0.75,200,2,-120]],
-    6:  [[0.50, 150, 4,  90], [0.20, 250, 2, -130]],
-    7:  [[0.30, 150, 4, 100], [0.70, 200, 3, -120]],
-    8:  [[0.20,150,3,130],[0.50,150,3,-130],[0.80,150,3,130]],
-    9:  [[0.50, 100, 4, 140], [0.20, 300, 2, -160], [0.80, 300, 2, 160]],
-    10: [[0.25, 100, 4, 130], [0.75, 100, 4, -130]],
+    1:  [[0.30, 150, 3, 110], [0.70, 200, 2, -120]],
+    2:  [[0.25, 150, 3, 130], [0.75, 200, 3, -130]],
+    3:  [[0.20, 150, 4, 100], [0.80, 200, 2, -150]],
+    4:  [[0.30, 150, 4, 130], [0.70, 250, 3, -140]],
+    5:  [[0.15,100,3,140],[0.40,200,2,-160],[0.60,100,2,160],[0.85,200,3,-140]],
+    6:  [[0.50, 150, 4, 120], [0.20, 250, 3, -150], [0.80, 280, 2, 170]],
+    7:  [[0.30, 150, 4, 140], [0.70, 200, 4, -130]],
+    8:  [[0.15,150,3,150],[0.40,180,3,-150],[0.65,150,3,150],[0.90,180,3,-150]],
+    9:  [[0.50, 100, 4, 160], [0.20, 300, 3, -180], [0.80, 300, 3, 180]],
+    10: [[0.50, 100, 5, 130]],
   };
 
   function makeLevel(n) {
@@ -159,70 +159,73 @@
     // Procedural for levels 11+
     // Difficulty ramps: more bubbles, larger, faster, more huge ones
     const tier = Math.floor((n - 11) / 10); // 0..4
-    const speedMul = 1 + tier * 0.18 + ((n - 11) % 10) * 0.02;
+    const speedMul = 1.4 + tier * 0.22 + ((n - 11) % 10) * 0.03;
     const rng = mulberry32(n * 9301 + 49297);
 
     // Choose composition based on level number
     const patterns = [
       // big chain
       () => {
-        const count = 1 + Math.min(3, Math.floor(n / 18));
+        const count = 2 + Math.min(4, Math.floor(n / 12));
         for (let i = 0; i < count; i++) {
-          const fx = 0.2 + (i / Math.max(1, count - 1)) * 0.6;
-          spawnBubble(W*fx, 120 + i*40, 4, (i%2?1:-1) * (90 + tier*20) * speedMul, palette);
+          const fx = 0.15 + (i / Math.max(1, count - 1)) * 0.7;
+          spawnBubble(W*fx, 120 + i*30, 4, (i%2?1:-1) * (130 + tier*25) * speedMul, palette);
         }
       },
       // medium swarm
       () => {
-        const count = 3 + Math.min(5, Math.floor(n / 8));
+        const count = 5 + Math.min(6, Math.floor(n / 6));
         for (let i = 0; i < count; i++) {
-          spawnBubble(120 + i * (W-240)/(count-1), 100 + (i%2)*120, 3,
-                     (i%2?1:-1) * (100 + tier*25) * speedMul, palette);
+          spawnBubble(80 + i * (W-160)/(count-1), 100 + (i%2)*120, 3,
+                     (i%2?1:-1) * (140 + tier*30) * speedMul, palette);
         }
       },
       // small army
       () => {
-        const count = 6 + Math.min(6, Math.floor(n / 6));
+        const count = 8 + Math.min(8, Math.floor(n / 5));
         for (let i = 0; i < count; i++) {
-          spawnBubble(80 + i * (W-160)/(count-1), 100 + (i%3)*80, 2,
-                     (i%2?1:-1) * (130 + tier*20) * speedMul, palette);
+          spawnBubble(60 + i * (W-120)/(count-1), 100 + (i%3)*80, 2,
+                     (i%2?1:-1) * (170 + tier*25) * speedMul, palette);
         }
       },
       // mixed assault
       () => {
-        spawnBubble(W*0.5, 100, 4, 100 * speedMul, palette);
-        spawnBubble(W*0.2, 250, 3, -130 * speedMul, palette);
-        spawnBubble(W*0.8, 250, 3, 130 * speedMul, palette);
-        if (n >= 20) spawnBubble(W*0.5, 350, 2, 150 * speedMul, palette);
+        spawnBubble(W*0.3, 130, 4, 140 * speedMul, palette);
+        spawnBubble(W*0.7, 130, 4, -140 * speedMul, palette);
+        spawnBubble(W*0.2, 280, 3, -160 * speedMul, palette);
+        spawnBubble(W*0.8, 280, 3, 160 * speedMul, palette);
+        if (n >= 18) spawnBubble(W*0.5, 350, 3, 180 * speedMul, palette);
+        if (n >= 28) spawnBubble(W*0.5, 200, 2, -200 * speedMul, palette);
       },
       // pyramid
       () => {
-        spawnBubble(W*0.5, 80, 4, 90 * speedMul, palette);
-        spawnBubble(W*0.3, 200, 3, -110 * speedMul, palette);
-        spawnBubble(W*0.7, 200, 3, 110 * speedMul, palette);
-        if (n >= 25) {
-          spawnBubble(W*0.2, 320, 2, -140 * speedMul, palette);
-          spawnBubble(W*0.8, 320, 2, 140 * speedMul, palette);
-        }
+        spawnBubble(W*0.5, 120, 4, 130 * speedMul, palette);
+        spawnBubble(W*0.25, 200, 4, -140 * speedMul, palette);
+        spawnBubble(W*0.75, 200, 4, 140 * speedMul, palette);
+        spawnBubble(W*0.15, 320, 3, -170 * speedMul, palette);
+        spawnBubble(W*0.85, 320, 3, 170 * speedMul, palette);
+        if (n >= 22) spawnBubble(W*0.5, 380, 2, 190 * speedMul, palette);
       },
       // crossfire
       () => {
-        const rows = Math.min(3, 1 + Math.floor(n / 20));
+        const rows = 2 + Math.min(3, Math.floor(n / 15));
         for (let r = 0; r < rows; r++) {
-          spawnBubble(50, 120 + r*100, 3, (120 + tier*20) * speedMul, palette);
-          spawnBubble(W-50, 120 + r*100, 3, -(120 + tier*20) * speedMul, palette);
+          spawnBubble(50, 120 + r*100, 3, (160 + tier*25) * speedMul, palette);
+          spawnBubble(W-50, 120 + r*100, 3, -(160 + tier*25) * speedMul, palette);
         }
+        if (n >= 20) spawnBubble(W*0.5, 200, 4, 130 * speedMul, palette);
       },
-      // huge boss
+      // mega boss (size 5!)
       () => {
-        spawnBubble(W*0.3, 100, 4, 80 * speedMul, palette);
-        spawnBubble(W*0.7, 100, 4, -80 * speedMul, palette);
-        if (n >= 30) spawnBubble(W*0.5, 250, 3, 150 * speedMul, palette);
+        spawnBubble(W*0.5, 130, 5, 120 * speedMul, palette);
+        if (n >= 20) spawnBubble(W*0.2, 320, 3, -160 * speedMul, palette);
+        if (n >= 30) spawnBubble(W*0.8, 320, 3, 160 * speedMul, palette);
+        if (n >= 40) spawnBubble(W*0.5, 380, 4, -170 * speedMul, palette);
       },
     ];
 
     let pIdx = Math.floor(rng() * patterns.length);
-    // Boss every 10 levels: force "huge boss" pattern
+    // Boss every 10 levels: force "mega boss" pattern (size 5 bubble)
     if (n % 10 === 0) pIdx = patterns.length - 1;
     patterns[pIdx]();
   }
@@ -237,11 +240,11 @@
   }
 
   function bubbleRadius(size) {
-    return [0, 16, 28, 44, 64][size];
+    return [0, 16, 28, 44, 64, 88][size];
   }
 
   function bubbleScore(size) {
-    return [0, 50, 30, 20, 10][size];
+    return [0, 50, 30, 20, 10, 5][size];
   }
 
   function spawnBubble(x, y, size, vx, palette) {
@@ -356,7 +359,7 @@
       harpoons.push({
         x: player.x,
         topY: player.y - 10,
-        speed: 700,
+        speed: 420,
         sticky: isSticky,
         stuck: false,
         stuckTimer: 0
@@ -413,7 +416,7 @@
       if (b.x + b.r > W) { b.x = W - b.r; b.vx = -Math.abs(b.vx); }
       if (b.y + b.r > H - 20) {
         b.y = H - 20 - b.r;
-        const bh = [0, 320, 380, 440, 500][b.size];
+        const bh = [0, 320, 380, 440, 500, 560][b.size];
         b.vy = -bh;
       }
       // Ceiling spikes — pop the bubble if it reaches them
@@ -517,7 +520,7 @@
   let stickyCharges = 0;
 
   function applyPowerup(type) {
-    if (type === 'life') lives = Math.min(lives + 1, 5);
+    if (type === 'life') lives = Math.min(lives + 1, 8);
     if (type === 'slow') slowTimer = 6;
     if (type === 'double') { hasDouble = true; doubleTimer = 8; }
     if (type === 'triple') { hasTriple = true; tripleTimer = 6; }
@@ -943,9 +946,11 @@
     ctx.fillText(`LEVEL ${level} / ${MAX_LEVEL}`, W/2, 20);
 
     ctx.textAlign = 'right';
-    ctx.fillText('LIVES', W - 100, 20);
+    const heartSpacing = 18;
+    const heartsW = lives * heartSpacing;
+    ctx.fillText('LIVES', W - heartsW - 30, 20);
     for (let i = 0; i < lives; i++) {
-      drawHeart(W - 80 + i * 22, 20, 8);
+      drawHeart(W - heartsW + i * heartSpacing + 8, 20, 7);
     }
 
     const tFrac = 1 - levelTimer / maxLevelTime;
@@ -1132,7 +1137,7 @@
   }
 
   function resetAll() {
-    level = 1; score = 0; lives = 3;
+    level = 1; score = 0; lives = 5;
     slowTimer = 0; hasDouble = false; doubleTimer = 0;
     hasTriple = false; tripleTimer = 0;
     freezeTimer = 0; magnetTimer = 0; shieldCharges = 0;
